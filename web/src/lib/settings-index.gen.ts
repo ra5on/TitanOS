@@ -329,7 +329,7 @@ export const settingsIndex: SettingsIndexEntry[] = [
 	},
 	{
 		p: '/settings/appearance',
-		k: 'phone.settings.dock',
+		k: 'phone.settings.bottom',
 		kind: 'row',
 		tab: 'dock',
 		in: ['phone.settings.title'],
