@@ -176,9 +176,9 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
-		min-height: calc(52px + env(safe-area-inset-top));
-		padding: env(safe-area-inset-top) calc(var(--space-1-5) + env(safe-area-inset-right)) 0
-			calc(6px + env(safe-area-inset-left));
+		min-height: calc(64px + env(safe-area-inset-top));
+		padding: calc(12px + env(safe-area-inset-top))
+			calc(var(--space-1-5) + env(safe-area-inset-right)) 0 calc(6px + env(safe-area-inset-left));
 		border-bottom: 1px solid var(--border);
 		background: var(--header);
 		flex: none;

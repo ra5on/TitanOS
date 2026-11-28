@@ -30,6 +30,10 @@ TitanOS ruft das lokale Modell mit einem Fenster von höchstens 16 384 Token (od
 
 Antworten sind Markdown und werden mit markdown-it angezeigt (Überschriften, Listen, Zitate, Tabellen, Code, Aufgabenlisten). HTML in einer Antwort bleibt Text; Links führen nur zu `http(s)`, `mailto:` und Seiten von TitanOS. Ein neuer Chat heißt nach den Wörtern seiner ersten Frage, die in 80 Zeichen passen, nie mitten im Wort geteilt. `PUT /chats/{id}` mit `title` benennt ihn um (eine Zeile, höchstens 120 Zeichen), `DELETE /chats/{id}` löscht ihn mit seinen Aufträgen. Solange ein Auftrag des Chats gerade nach außen schreibt (`executing`), antwortet das Löschen mit 409. Der Vermerk einer bereits ausgeführten Wirkung bleibt, damit ein gelöschter Auftrag nie wiederholt wird.
 
+## Oberfläche (seit 1.40, §125)
+
+Gewählt vom Inhaber am 28.11.2026 aus der Vorführung „Agent in Bewegung“ (A1, A4, A5, A6, B1–B6, C1 ohne Leuchten um den Bildschirm, D1–D5). Bausteine: `Trail.svelte` (Schweif und Zustände des Eingabefelds, Linie genau auf der Mitte des 1-px-Rands, ein Umlauf beim Arbeiten 3,2 s), `Figure.svelte` (die drei Punkte als Figur: idle, listen, think, work, done – bei done gehen die Punkte an die Ecken eines Hakens und eine Linie verbindet sie), `Start.svelte` (Startseite), `personal-140.css`. Am Handy folgt die Seite dem `visualViewport` (Klasse `pa-locked`, bei offener Tastatur `pa-keyboard`); Chats, Aufträge und Einstellungen stehen im Blatt hinter ☰. B6 (Gedanken laufen mit) und echtes Wort für Wort beim Entstehen brauchen Streaming und folgen später; bis dahin erscheint eine fertige Antwort, die im Blick entstand, Wort für Wort. Mit „Bewegung reduzieren“ oder „Bewegung: aus“ steht alles still.
+
 ## Mitteilungen (seit 1.39)
 
 Inhaber 28.11.2026: „wenn ein Chatfenster im Agent geöffnet ist, dass ich nicht trotzdem noch eine Benachrichtigung bekomme … aber nur wenn halt auch auf dem Desktop kein Fenster … geöffnet ist.“

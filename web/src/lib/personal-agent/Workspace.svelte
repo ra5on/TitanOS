@@ -46,10 +46,13 @@
 	import Sheet from './Sheet.svelte';
 	import VoiceInput from './VoiceInput.svelte';
 	import ChatView from './ChatView.svelte';
+	import Start from './Start.svelte';
+	import Trail, { type TrailMode } from './Trail.svelte';
 	import { startPresence } from './presence.ts';
 	import SettingsView from './SettingsView.svelte';
 	import OfficeTools from './OfficeTools.svelte';
 	import './personal.css';
+	import './personal-140.css';
 
 	type Tab = 'chat' | 'jobs' | 'settings';
 	const tabs: { id: Tab; icon: IconName }[] = [
@@ -128,6 +131,33 @@
 		}
 	}
 	const rows = $derived(snapshot?.jobs.filter((j) => j.request.chatId === chatId) ?? []);
+	// 1.40 (§125): what the frame of the composer shows (Trail.svelte).
+	let typing = $state(false),
+		doneUntil = $state(0),
+		now = $state(Date.now());
+	const active = $derived(rows.findLast((j) => j.status === 'running' || j.status === 'planned'));
+	const trail = $derived<TrailMode>(
+		sheet === 'voice'
+			? 'voice'
+			: rows.some((j) => j.status === 'waiting')
+				? 'wait'
+				: active
+					? 'work'
+					: doneUntil > now
+						? 'done'
+						: typing || prompt.trim()
+							? 'type'
+							: 'rest',
+	);
+	const trailText = $derived(
+		trail === 'wait'
+			? msg('waitingYou')
+			: trail === 'work'
+				? msg('working')
+				: trail === 'done'
+					? msg('done')
+					: '',
+	);
 	const detail = $derived(snapshot?.jobs.find((j) => j.id === detailId));
 	const counts = $derived(snapshot?.jobs.filter((j) => j.status === 'waiting').length ?? 0);
 	const appearance = $derived(snapshot ? { ...snapshot.settings, ...draft } : undefined);
@@ -159,6 +189,17 @@
 		search.trim() ? (result?.chats ?? []) : (snapshot?.chats ?? []).toReversed(),
 	);
 	const options = $derived((snapshot?.capabilities ?? []).filter((c) => c.effective !== 'never'));
+	// 1.40 (§125): chats under Heute, Gestern, Diese Woche, Älter, newest first.
+	function dayGroup(iso: string): 'today' | 'yesterday' | 'week' | 'older' {
+		const start = new Date();
+		start.setHours(0, 0, 0, 0);
+		const t = new Date(iso).getTime(),
+			day = 86_400_000;
+		if (t >= start.getTime()) return 'today';
+		if (t >= start.getTime() - day) return 'yesterday';
+		if (t >= start.getTime() - 6 * day) return 'week';
+		return 'older';
+	}
 	function matches(tool: string, selected: Source[]) {
 		if (!selected.length) return ['chat.ask', 'chat.cloud', 'backup.status'].includes(tool);
 		if (selected.every((s) => s.kind === 'office.region')) {
@@ -351,6 +392,15 @@
 						j,
 					),
 			);
+			if (
+				j?.status === 'done' &&
+				j.request.chatId === chatId &&
+				previous.jobs.find((v) => v.id === j.id)?.status !== 'done'
+			) {
+				doneUntil = Date.now() + 1500;
+				now = Date.now();
+				setTimeout(() => (now = Date.now()), 1550);
+			}
 			if (j?.status === 'done' || j?.status === 'waiting') {
 				signal(
 					['reply-' + j.id, 'card-' + j.id, ...(detailId === j.id ? ['detail'] : [])],
@@ -459,6 +509,33 @@
 	});
 	// 1.39: no push while this window is in view (presence.ts).
 	onMount(() => startPresence());
+	// 1.40 (§125, owner 28.11.2026: "der Text rutscht über die Tastatur … da
+	// kann ich halt ausscrollen"): on the phone the Agent is exactly as high as
+	// what can be seen. iOS does not make 100dvh smaller for the keyboard; the
+	// visual viewport is, so the page follows it and nothing else scrolls.
+	onMount(() => {
+		const vv = window.visualViewport;
+		if (!vv || inWindow) return;
+		const root = document.documentElement;
+		const set = () => {
+			root.style.setProperty('--pa-vvh', vv.height + 'px');
+			root.style.setProperty('--pa-vvtop', vv.offsetTop + 'px');
+			// The keyboard is open when much less than the window can be seen;
+			// then the composer sits right on it, without the home-bar gap.
+			root.classList.toggle('pa-keyboard', vv.height < window.innerHeight - 120);
+		};
+		set();
+		root.classList.add('pa-locked');
+		vv.addEventListener('resize', set);
+		vv.addEventListener('scroll', set);
+		return () => {
+			vv.removeEventListener('resize', set);
+			vv.removeEventListener('scroll', set);
+			root.classList.remove('pa-locked', 'pa-keyboard');
+			root.style.removeProperty('--pa-vvh');
+			root.style.removeProperty('--pa-vvtop');
+		};
+	});
 	onMount(() => {
 		const media = matchMedia('(prefers-reduced-motion: reduce)');
 		const update = () => {
@@ -655,6 +732,18 @@
 		select(j);
 		void polling?.now();
 	}
+	function suggest(kind: 'backup' | 'example' | 'files' | 'ask') {
+		if (kind === 'example') return void submit(true);
+		if (kind === 'backup') {
+			setTool('backup.status');
+			return void submit();
+		}
+		if (kind === 'files') {
+			sheet = 'context';
+			return;
+		}
+		void tick().then(() => input?.focus());
+	}
 	function background(j: Job) {
 		show('jobs');
 		signal(['reply-' + j.id, 'jobs-tab'], stepTool(j));
@@ -700,7 +789,12 @@
 				bind:value={search}
 			/>{/if}
 		<div class="pa-history">
-			{#each filteredChats as chat (chat.id)}<div class="pa-chat-row">
+			{#each filteredChats as chat, i (chat.id)}{#if !search.trim() && (i === 0 || dayGroup(filteredChats[i - 1].created) !== dayGroup(chat.created))}<h3
+						class="pa-group"
+					>
+						{msg('group.' + dayGroup(chat.created))}
+					</h3>{/if}
+				<div class="pa-chat-row">
 					<button
 						aria-current={chat.id === chatId ? 'page' : undefined}
 						onclick={() => openChat(chat.id)}>{chat.title}</button
@@ -834,11 +928,11 @@
 	{#if !small}
 		<aside class="pa-nav">
 			<div class="pa-brand">{@render brand()}</div>
-			<button class="pa-button" onclick={newChat}><Icon name="plus" />{msg('newChat')}</button>
-			<nav>{@render navButtons()}</nav>
-			<hr />
-			<h2>{msg('chats')}</h2>
+			<button class="pa-button pa-new" onclick={newChat}
+				><Icon name="edit" />{msg('newChat')}</button
+			>
 			{@render history()}
+			<nav class="pa-nav-foot">{@render navButtons()}</nav>
 			<div class="pa-account">
 				<span>{(session.data?.user?.name ?? '').slice(0, 1).toUpperCase()}</span>
 				<div><b>{session.data?.user?.name}</b><small>{msg('workspace')}</small></div>
@@ -848,15 +942,29 @@
 				>{/if}
 		</aside>
 	{:else}
-		<header class="pa-mobile-header">
-			<div class="pa-brand">{@render brand()}</div>
-			<div class="pa-actions">
-				<button class="pa-icon" aria-label={msg('openChats')} onclick={() => (sheet = 'history')}
-					><Icon name="sidebar" /></button
-				><button class="pa-tab-avatar" aria-label={msg('settings')} onclick={() => show('settings')}
-					>{(session.data?.user?.name ?? '').slice(0, 1).toUpperCase()}</button
+		<!-- 1.40 (§125): like the apps of the iPhone – round buttons, the title in
+		     the middle; chats, jobs and settings live in the sheet behind ☰. -->
+		<header class="pa-mobile-header pa-phone-head">
+			<button
+				class="pa-round"
+				aria-label={msg('openChats') + (counts ? ' · ' + counts + ' ' + msg('attention') : '')}
+				onclick={() => (sheet = 'history')}
+				><Icon name="menu" />{#if counts}<small class="pa-round-count" aria-hidden="true"
+						>{counts}</small
+					>{/if}</button
+			>
+			<div class="pa-phone-title">
+				<b>{tab === 'chat' ? (chosen?.title ?? 'Agent') : msg(tab)}</b>
+				<small
+					><span class="pa-state-dot" class:off={model.state !== 'ready'}></span>{model.state ===
+					'ready'
+						? (model.model ?? msg('modelReady'))
+						: msg('modelDown')}</small
 				>
 			</div>
+			<button class="pa-round" aria-label={msg('newChat')} onclick={newChat}
+				><Icon name="edit" /></button
+			>
 		</header>
 	{/if}
 	<main class="pa-main">
@@ -899,24 +1007,39 @@
 						>{/if}
 				</header>{/if}
 			<div class="pa-chat-scroll" bind:this={scroller}>
-				<ChatView
-					{phaseFor}
-					chat={chosen}
-					jobs={rows}
-					caps={snapshot.capabilities}
-					settings={snapshot.settings}
-					{reduced}
-					{select}
-					onreview={reviewDraft}
-					onedit={editDraft}
-					onsource={sourceOpen}
-					onexample={() => void submit(true)}
-					onsettings={() => show('settings', 'permissions')}
-					available={readyOptions}
-					oncontext={() => (sheet = 'context')}
-					onbackground={background}
-					oncue={signal}
-				/>
+				{#if !chosen && !rows.length}<Start
+						name={session.data?.user?.name ?? ''}
+						jobs={snapshot.jobs}
+						caps={snapshot.capabilities}
+						available={readyOptions}
+						{calm}
+						listening={sheet === 'voice'}
+						model={localAllowed && model.state !== 'ready' && model.state !== 'checking'
+							? modelStatus(model)
+							: ''}
+						{select}
+						onapprove={(j) => act('approve', j)}
+						onsuggest={suggest}
+						onmodel={() => show('settings', 'model')}
+						onsettings={() => show('settings', 'permissions')}
+					/>{:else}<ChatView
+						{phaseFor}
+						chat={chosen}
+						jobs={rows}
+						caps={snapshot.capabilities}
+						settings={snapshot.settings}
+						{reduced}
+						{select}
+						onreview={reviewDraft}
+						onedit={editDraft}
+						onsource={sourceOpen}
+						onexample={() => void submit(true)}
+						onsettings={() => show('settings', 'permissions')}
+						available={readyOptions}
+						oncontext={() => (sheet = 'context')}
+						onbackground={background}
+						oncue={signal}
+					/>{/if}
 			</div>
 			<form
 				class="pa-compose"
@@ -925,7 +1048,7 @@
 					void submit();
 				}}
 			>
-				{#if tool === 'chat.ask' && selected && selected.effective !== 'never' && model.state !== 'ready'}
+				{#if (chosen || rows.length) && tool === 'chat.ask' && selected && selected.effective !== 'never' && model.state !== 'ready'}
 					<div class="pa-model-status" role="status">
 						<span>{modelStatus(model)}</span>
 						{#if model.state !== 'checking'}<button
@@ -950,7 +1073,14 @@
 								>{sourceTitle(src)}<Icon name="close" size={13} /></button
 							>{/each}
 					</div>{/if}
-				<div class="pa-input" data-guide="composer">
+				{#if trailText}<p class="pa-trail-say" role="status">
+						{#if trail === 'wait'}<Icon name="lock" size={13} />{:else if trail === 'done'}<Icon
+								name="check"
+								size={13}
+							/>{/if}{trailText}
+					</p>{/if}
+				<div class="pa-input" data-guide="composer" data-trail={trail}>
+					<Trail mode={trail} {calm} />
 					<button
 						class="pa-icon"
 						type="button"
@@ -967,7 +1097,9 @@
 							: tool === 'chat.ask' && model.state === 'ready'
 								? t('papim.model.ask', { model: model.model ?? '' })
 								: msg('placeholder')}
-						onkeydown={onkey}></textarea>
+						onkeydown={onkey}
+						onfocus={() => (typing = true)}
+						onblur={() => (typing = false)}></textarea>
 					<button
 						type="button"
 						class="pa-icon"
@@ -977,23 +1109,40 @@
 							signal(['composer', 'orb'], tool);
 						}}><Icon name="mic" /></button
 					>
-					<button
-						type="submit"
-						class="pa-send"
-						aria-label={msg('send')}
-						disabled={pending ||
-							!selected ||
-							selected.effective === 'never' ||
-							(office && !valid) ||
-							!canSubmit ||
-							((tool.startsWith('chat.') || tool === 'files.search') && !prompt.trim())}
-						><Icon name="arrowUp" /></button
-					>
+					{#if active && !prompt.trim()}<button
+							type="button"
+							class="pa-send pa-stop"
+							aria-label={msg('stop')}
+							disabled={pending}
+							onclick={() => act('cancel', active)}
+							><span class="pa-stop-shape"></span><svg viewBox="0 0 52 52" aria-hidden="true"
+								><circle
+									class:spin={!calm && (active.totalSteps ?? 0) <= 1}
+									cx="26"
+									cy="26"
+									r="24"
+									pathLength="100"
+									stroke-dasharray={(active.totalSteps ?? 0) > 1
+										? `${Math.max(6, ((active.completedSteps ?? 0) / (active.totalSteps ?? 1)) * 100)} 100`
+										: '28 100'}
+								/></svg
+							></button
+						>{:else}<button
+							type="submit"
+							class="pa-send"
+							aria-label={msg('send')}
+							disabled={pending ||
+								!selected ||
+								selected.effective === 'never' ||
+								(office && !valid) ||
+								!canSubmit ||
+								((tool.startsWith('chat.') || tool === 'files.search') && !prompt.trim())}
+							><Icon name="arrowUp" /></button
+						>{/if}
 				</div>
 			</form>
 		{/if}
 	</main>
-	{#if small}<nav class="pa-tabs" aria-label="Agent">{@render navButtons()}</nav>{/if}
 	{#if detail && snapshot}{#if narrow}<Sheet title={msg('jobDetails')} onclose={closeDetail} {calm}
 				><JobDetail
 					job={detail}
@@ -1023,10 +1172,15 @@
 				/>
 			</aside>{/if}{/if}
 	{#if sheet === 'history'}<Sheet title={msg('chats')} {calm} onclose={() => (sheet = '')}
-			><button class="pa-button" onclick={newChat}><Icon name="plus" />{msg('newChat')}</button
-			>{@render history()}<button class="pa-link" onclick={() => openInProgram('/')}
-				><Icon name="home" />{msg('home')}</button
-			></Sheet
+			><button class="pa-button pa-new" onclick={newChat}
+				><Icon name="edit" />{msg('newChat')}</button
+			>{@render history()}
+			<nav class="pa-sheet-nav" aria-label="Agent">
+				{@render navButtons()}
+				<button onclick={() => openInProgram('/')}
+					><Icon name="home" /><span>{msg('home')}</span></button
+				>
+			</nav></Sheet
 		>
 	{:else if sheet === 'context'}<Sheet
 			title={msg('requestType')}

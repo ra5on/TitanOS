@@ -4,6 +4,27 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { cutTextIn, fixtureFactory } from "./test-ui-fixtures.mjs";
 
+// 1.40 (§125): on the phone, chat, jobs and settings live in the sheet
+// behind ☰; on the desktop in the side bar.
+async function openTab(page, id) {
+  // A sheet that is still sliding out keeps its buttons for a moment.
+  await page
+    .locator(".pa-sheet")
+    .waitFor({ state: "detached", timeout: 3000 })
+    .catch(() => {});
+  const tab = page.locator(`[data-guide="${id}-tab"]:visible`);
+  if (!(await tab.count())) {
+    await page.getByRole("button", { name: /^Chatverlauf öffnen/ }).click();
+    // The sheet slides in; its buttons are pressed once it stands still.
+    await page.waitForTimeout(450);
+  }
+  await page.locator(`[data-guide="${id}-tab"]:visible`).click();
+}
+const chatTitle = (page, name) =>
+  page
+    .locator(".pa-chat-head h1:visible, .pa-phone-title b:visible")
+    .filter({ hasText: name });
+
 const origin = process.env.UI_URL || "http://127.0.0.1:5393";
 assert.ok(
   ["localhost", "127.0.0.1", "[::1]"].includes(new URL(origin).hostname),
@@ -118,8 +139,8 @@ async function workflowMotion(page, job, shot) {
         .some((a) => a.playState === "running"),
   );
   const paused = await atRest();
-  await page.locator('[data-guide="jobs-tab"]:visible').click();
-  await page.locator('[data-guide="chat-tab"]:visible').click();
+  await openTab(page, "jobs");
+  await openTab(page, "chat");
   await step.getByText("Hier pausiert").waitFor();
   const restored = await atRest();
   assert.ok(
@@ -184,7 +205,7 @@ async function run(width, height) {
   }
   const go = async (query = "") => {
     await page.goto(origin + "/agent" + query);
-    await page.locator(".pa-welcome, .pa-conversation").first().waitFor();
+    await page.locator(".pa-start, .pa-conversation").first().waitFor();
   };
   await ctx.route("**/api/v1/mail/accounts", (r) =>
     r.fulfill({
@@ -329,11 +350,10 @@ async function run(width, height) {
     }
     await go();
     await shot("leer");
-    await page.locator(".pa-example").click();
     await page
-      .locator(".pa-chat-head")
-      .getByRole("heading", { name: "Beispiel" })
-      .waitFor();
+      .locator(".pa-suggest button", { hasText: "Beispielauftrag" })
+      .click();
+    await chatTitle(page, "Beispiel").first().waitFor();
     assert.equal(examples, 1);
     snapshot.jobs = [];
     snapshot.chats = [];
@@ -411,10 +431,10 @@ async function run(width, height) {
       await page.emulateMedia({ reducedMotion: "reduce" });
     }
     if (mobile) await page.keyboard.press("Escape");
-    await page.locator('[data-guide="jobs-tab"]:visible').click();
+    await openTab(page, "jobs");
     await page.locator(".pa-row").first().waitFor();
     await shot("auftraege");
-    await page.locator('[data-guide="settings-tab"]:visible').click();
+    await openTab(page, "settings");
     await page.locator(".pa-sample").waitFor();
     const skills = page
       .locator("details")
@@ -467,7 +487,7 @@ async function run(width, height) {
       "off",
     );
     if (mobile)
-      await page.getByRole("button", { name: "Chatverlauf öffnen" }).click();
+      await page.getByRole("button", { name: /^Chatverlauf öffnen/ }).click();
     await page.locator(".pa-ui input[type=search]:visible").fill("Angebot");
     await page.getByRole("button", { name: "Antwortentwurf gefunden" }).click();
     await page.locator(".pa-detail[data-job=draft]").waitFor();
@@ -687,7 +707,7 @@ async function desktopLauncher() {
     await page.locator(".topbar [data-menu-button]").click();
     await page.locator('.launcher [data-key="app:agent"] .prog').click();
     const window = page.frameLocator('iframe[data-app="app:agent"]').last();
-    await window.locator(".pa-welcome").waitFor();
+    await window.locator(".pa-start").waitFor();
     await window.locator(".pa-input textarea").focus();
     await page.keyboard.press("Alt+Shift+2");
     await window
@@ -706,7 +726,7 @@ async function desktopLauncher() {
       .waitFor();
     await window.locator(".pa-pane h1").click();
     await page.keyboard.press("Alt+Shift+N");
-    await window.locator(".pa-welcome").waitFor();
+    await window.locator(".pa-start").waitFor();
     await page.keyboard.press("Alt+Shift+ArrowUp");
     await window
       .locator(".pa-chat-head")
@@ -723,7 +743,7 @@ async function desktopLauncher() {
       .getByRole("heading", { name: "Projekt B" })
       .waitFor();
     await page.keyboard.press("Alt+Shift+N");
-    await window.locator(".pa-welcome").waitFor();
+    await window.locator(".pa-start").waitFor();
     if (process.env.UI_OUTPUT)
       await page.screenshot({
         path: join(process.env.UI_OUTPUT, engine + "-arbeitsplatz-agent.png"),

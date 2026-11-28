@@ -997,7 +997,8 @@
 		gap: var(--space-2);
 		align-items: center;
 		min-height: 64px;
-		padding: calc(var(--space-2-5) + env(safe-area-inset-top)) var(--space-3) var(--space-2-5);
+		padding: calc(var(--space-2-5) + 12px + env(safe-area-inset-top)) var(--space-3)
+			var(--space-2-5);
 		background: linear-gradient(to bottom, rgb(0 0 0 / 0.28), transparent);
 		touch-action: pan-x;
 	}
@@ -1107,7 +1108,7 @@
 		position: absolute;
 		z-index: 6;
 		left: 50%;
-		top: calc(64px + env(safe-area-inset-top));
+		top: calc(76px + env(safe-area-inset-top));
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);

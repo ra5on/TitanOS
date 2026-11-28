@@ -265,9 +265,9 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
-		height: calc(52px + env(safe-area-inset-top));
-		padding: env(safe-area-inset-top) calc(var(--space-2) + env(safe-area-inset-right)) 0
-			calc(8px + env(safe-area-inset-left));
+		height: calc(64px + env(safe-area-inset-top));
+		padding: calc(12px + env(safe-area-inset-top)) calc(var(--space-2) + env(safe-area-inset-right))
+			0 calc(8px + env(safe-area-inset-left));
 		background: var(--header);
 		border-bottom: 1px solid var(--border);
 	}
