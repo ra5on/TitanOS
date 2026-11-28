@@ -468,7 +468,7 @@
 		margin: auto;
 		overflow-y: auto;
 		overscroll-behavior: contain;
-		padding: calc(14px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+		padding: calc(26px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
 			calc(var(--phone-dock-height, 0px) + 34px + env(safe-area-inset-bottom))
 			max(16px, env(safe-area-inset-left));
 		text-shadow: 0 1px 5px #0b1b24;

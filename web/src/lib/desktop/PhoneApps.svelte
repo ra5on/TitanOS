@@ -127,7 +127,7 @@
 		margin: 0 auto;
 		overflow-y: auto;
 		overscroll-behavior: contain;
-		padding: calc(14px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+		padding: calc(26px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
 			calc(var(--phone-dock-height, 0px) + 34px + env(safe-area-inset-bottom))
 			max(16px, env(safe-area-inset-left));
 		color: #f5f9fb;

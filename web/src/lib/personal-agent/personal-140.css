@@ -1,0 +1,747 @@
+/* 1.40 (§125, owner 28.11.2026): the Agent page anew – round buttons like the
+   apps of the iPhone, no blue ring in the composer, a page that never scrolls
+   as a whole on the phone, and the motion the owner chose in "Agent in
+   Bewegung" (A1, A4, A5, A6, B1–B6, C1 without a glow around the screen,
+   D1–D5). With "reduce motion" or motion "off" nothing moves; every state is
+   also text and a symbol. */
+
+.pa-ui {
+	--pa-wait: #d29922;
+	--pa-done: #2ea043;
+	--pa-trail-2: color-mix(in srgb, var(--pa-accent) 55%, #b48cff);
+	--pa-trail-3: color-mix(in srgb, var(--pa-accent) 55%, #4fd1c5);
+}
+
+/* The phone: as high as what can be seen (visual viewport), the keyboard
+   never pushes the page up. */
+html.pa-padlocked,
+html.pa-padlocked body {
+	overflow: hidden;
+	overscroll-behavior: none;
+}
+html.pa-padlocked main:has(> .pa-shell) {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: var(--pa-vvtop, 0px);
+	height: var(--pa-vvh, 100dvh);
+}
+.pa-small .pa-chat-scroll {
+	overscroll-behavior: contain;
+}
+.pa-small {
+	grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* Head on the phone: ☰ – title – ✎, 12 px further down than the status bar
+   so that the soft edge iOS lays over the top leaves the buttons clear. */
+.pa-ui .pa-phone-head {
+	border-bottom: 0;
+	padding: calc(12px + max(9px, env(safe-area-inset-top))) 12px 6px;
+	gap: 10px;
+}
+.pa-ui .pa-round {
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	flex: none;
+	background: color-mix(in srgb, var(--pa-text) 9%, var(--pa-background));
+	position: relative;
+}
+.pa-round-count {
+	position: absolute;
+	top: -2px;
+	right: -2px;
+	min-width: 18px;
+	height: 18px;
+	border-radius: 9px;
+	padding: 0 5px;
+	display: grid;
+	place-items: center;
+	font-size: 11px;
+	font-weight: 700;
+	background: var(--pa-wait);
+	color: #1a1204;
+}
+.pa-phone-title {
+	flex: 1;
+	min-width: 0;
+	display: grid;
+	justify-items: center;
+	text-align: center;
+	gap: 1px;
+}
+.pa-phone-title b {
+	font-size: 16px;
+	line-height: 1.25;
+	overflow-wrap: anywhere;
+}
+.pa-phone-title small {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 12.5px;
+	color: var(--pa-muted);
+}
+.pa-state-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--pa-done);
+	flex: none;
+}
+.pa-state-dot.off {
+	background: var(--pa-wait);
+}
+
+/* The composer: one frame around all of it, no ring inside. */
+.pa-ui .pa-input {
+	position: relative;
+	isolation: isolate;
+	border-radius: 24px;
+	padding: 5px;
+	transition: border-color 0.25s;
+}
+.pa-ui .pa-input:focus-within {
+	border-color: color-mix(in srgb, var(--pa-text) 34%, transparent);
+}
+.pa-ui .pa-input textarea:focus-visible,
+.pa-ui .pa-input textarea:focus {
+	outline: none;
+}
+.pa-ui .pa-send,
+.pa-ui .pa-input .pa-icon {
+	border-radius: 50%;
+}
+.pa-trail-say {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	color: var(--pa-muted);
+	margin: 0 6px 4px;
+}
+.pa-trail-say:has(+ .pa-input[data-trail='wait']) {
+	color: color-mix(in srgb, var(--pa-wait) 70%, var(--pa-text));
+}
+
+/* D1: send becomes stop, with a ring for the progress. */
+.pa-ui .pa-stop {
+	position: relative;
+	background: color-mix(in srgb, var(--pa-text) 14%, transparent);
+	color: var(--pa-text);
+}
+.pa-stop-shape {
+	width: 13px;
+	height: 13px;
+	border-radius: 3px;
+	background: currentColor;
+	animation: pa-morph 0.35s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+@keyframes pa-morph {
+	from {
+		transform: scale(0.4) rotate(45deg);
+		border-radius: 50%;
+	}
+}
+.pa-stop svg {
+	position: absolute;
+	inset: -3px;
+	width: calc(100% + 6px);
+	height: calc(100% + 6px);
+	transform: rotate(-90deg);
+	overflow: visible;
+}
+.pa-stop circle {
+	fill: none;
+	stroke: var(--pa-accent);
+	stroke-width: 2.5;
+	stroke-linecap: round;
+	transition: stroke-dasharray 0.6s;
+}
+.pa-stop circle.spin {
+	transform-origin: 26px 26px;
+	animation: pa-spin 1.6s linear infinite;
+}
+@keyframes pa-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* B5: a light runs over the text of what happens now. */
+.pa-shimmer {
+	background: linear-gradient(
+		100deg,
+		var(--pa-text) 0 38%,
+		color-mix(in srgb, var(--pa-text) 40%, #fff) 46%,
+		var(--pa-accent) 50%,
+		color-mix(in srgb, var(--pa-text) 40%, #fff) 54%,
+		var(--pa-text) 62% 100%
+	);
+	background-size: 260% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: pa-shim 2.4s cubic-bezier(0.45, 0.1, 0.35, 1) infinite;
+}
+@keyframes pa-shim {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -60% 0;
+	}
+}
+
+/* Start (C1). */
+.pa-start {
+	width: min(760px, 100%);
+	margin: 0 auto;
+	display: grid;
+	gap: 18px;
+	padding: 4px 16px 18px;
+	align-content: end;
+	min-height: 100%;
+}
+.pa-orb {
+	display: grid;
+	justify-items: center;
+	gap: 4px;
+	margin-top: 8px;
+}
+.pa-orb-say {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--pa-muted);
+	text-align: center;
+}
+.pa-hello h1 {
+	font-size: clamp(26px, 4vw, 34px);
+	line-height: 1.15;
+	letter-spacing: -0.01em;
+	margin: 0 0 4px;
+}
+.pa-note {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	padding: 12px 14px;
+	border-radius: 18px;
+	background: color-mix(in srgb, var(--pa-wait) 13%, var(--pa-navigation));
+}
+.pa-note > svg {
+	color: var(--pa-wait);
+	flex: none;
+	margin-top: 2px;
+}
+.pa-note div {
+	display: grid;
+	gap: 2px;
+	justify-items: start;
+}
+.pa-start-group {
+	display: grid;
+	gap: 8px;
+}
+.pa-start-group h2 {
+	font-size: 12.5px;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	color: var(--pa-muted);
+	margin: 0 4px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.pa-wait-head {
+	color: color-mix(in srgb, var(--pa-wait) 75%, var(--pa-text)) !important;
+}
+.pa-ui .pa-start-card {
+	display: grid;
+	gap: 9px;
+	padding: 13px 14px;
+	border-radius: 20px;
+	background: var(--pa-navigation);
+	text-align: start;
+	width: 100%;
+	border: 1px solid transparent;
+}
+.pa-start-card .pa-sc-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+.pa-start-card .pa-sc-row small {
+	color: var(--pa-muted);
+	white-space: nowrap;
+}
+.pa-sc-col {
+	display: grid;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+.pa-progress {
+	display: block;
+	height: 4px;
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--pa-text) 12%, transparent);
+	overflow: hidden;
+}
+.pa-progress u {
+	display: block;
+	height: 100%;
+	width: 30%;
+	border-radius: 4px;
+	background: linear-gradient(90deg, var(--pa-accent), var(--pa-trail-2));
+	transition: width 0.8s;
+}
+.pa-progress.pa-indeterminate u {
+	animation: pa-slide 1.8s ease-in-out infinite;
+}
+@keyframes pa-slide {
+	from {
+		transform: translateX(-110%);
+	}
+	to {
+		transform: translateX(340%);
+	}
+}
+.pa-ui .pa-waitcard {
+	border-color: color-mix(in srgb, var(--pa-wait) 55%, transparent);
+	transition:
+		border-color 0.5s,
+		opacity 0.5s;
+}
+.pa-ui .pa-waitcard.pa-opened {
+	border-color: color-mix(in srgb, var(--pa-done) 60%, transparent);
+}
+/* D2: the lock opens with a small spring. */
+.pa-padlock {
+	display: inline-grid;
+	place-items: center;
+	flex: none;
+	color: var(--pa-wait);
+}
+.pa-padlock svg {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2.2;
+	stroke-linecap: round;
+}
+.pa-padlock .sh {
+	transition: transform 0.45s cubic-bezier(0.3, 1.5, 0.5, 1);
+	transform-origin: 21px 15px;
+	transform-box: view-box;
+}
+.pa-padlock.open {
+	color: var(--pa-done);
+}
+.pa-padlock.open .sh {
+	transform: translateY(-3px) rotate(28deg);
+}
+.pa-ui .pa-waitline {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	padding: 8px 12px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--pa-wait) 12%, var(--pa-navigation));
+}
+/* D5: suggestions are pressed in and a light runs over them. */
+.pa-suggest {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.pa-ui .pa-suggest button {
+	position: relative;
+	overflow: hidden;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	border-radius: 999px;
+	background: var(--pa-navigation);
+	transition: transform 0.15s;
+}
+.pa-ui .pa-suggest button:active {
+	transform: scale(0.96);
+}
+.pa-suggest button::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(100deg, transparent 35%, rgb(255 255 255 / 0.2) 50%, transparent 65%);
+	transform: translateX(-120%);
+	pointer-events: none;
+}
+.pa-suggest button.pa-shine::after {
+	animation: pa-chipshine 0.7s ease-out;
+}
+@keyframes pa-chipshine {
+	to {
+		transform: translateX(120%);
+	}
+}
+
+/* Chat: B1 what it does, B2 its path, B3 the tick, D4 messages slide in. */
+.pa-doing {
+	display: grid;
+	gap: 1px;
+	min-width: 0;
+}
+.pa-doing small {
+	color: var(--pa-muted);
+	font-size: 12.5px;
+}
+.pa-path {
+	width: min(320px, 100%);
+	display: flex;
+	align-items: center;
+	max-width: 320px;
+	margin: 6px 0 2px;
+}
+.pa-path-node {
+	width: 11px;
+	height: 11px;
+	border-radius: 50%;
+	border: 2px solid color-mix(in srgb, var(--pa-text) 25%, transparent);
+	flex: none;
+	transition: all 0.4s;
+}
+.pa-path-node.done {
+	background: var(--pa-accent);
+	border-color: var(--pa-accent);
+}
+.pa-path-node.now {
+	border-color: var(--pa-accent);
+	box-shadow: 0 0 0 5px color-mix(in srgb, var(--pa-accent) 18%, transparent);
+}
+.pa-path-bar {
+	flex: 1;
+	height: 2px;
+	background: color-mix(in srgb, var(--pa-text) 15%, transparent);
+	overflow: hidden;
+}
+.pa-path-bar u {
+	display: block;
+	height: 100%;
+	background: var(--pa-accent);
+	transform-origin: left;
+	transition: transform 0.6s;
+}
+.pa-finish {
+	padding: 4px 0;
+}
+.pa-md .pa-word {
+	opacity: 0;
+	animation: pa-word 0.35s ease-out forwards;
+}
+@keyframes pa-word {
+	from {
+		opacity: 0;
+		filter: blur(3px);
+	}
+	to {
+		opacity: 1;
+		filter: none;
+	}
+}
+.pa-enter {
+	animation: pa-enter 0.7s cubic-bezier(0.2, 1.2, 0.3, 1) both;
+}
+@keyframes pa-enter {
+	from {
+		opacity: 0;
+		transform: translateY(14px) scale(0.98);
+		filter: blur(6px);
+	}
+}
+.pa-ui .pa-details {
+	margin-top: 2px;
+}
+
+/* Sheet behind ☰: chats by day, then jobs, settings, home. */
+.pa-group {
+	font-size: 12.5px;
+	font-weight: 700;
+	color: var(--pa-muted);
+	margin: 12px 10px 2px;
+}
+.pa-sheet-nav,
+.pa-nav-foot {
+	display: grid;
+	gap: 2px;
+	border-top: 1px solid var(--pa-line);
+	padding-top: 8px;
+	margin-top: 8px;
+}
+.pa-ui .pa-sheet-nav button,
+.pa-ui .pa-nav-foot button {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 11px 10px;
+	width: 100%;
+	text-align: start;
+	position: relative;
+	border-radius: 12px;
+}
+.pa-ui .pa-sheet-nav button[aria-current='page'],
+.pa-ui .pa-nav-foot button[aria-current='page'] {
+	background: color-mix(in srgb, var(--pa-accent) 16%, transparent);
+	font-weight: 600;
+}
+.pa-ui .pa-button.pa-new {
+	border-radius: 14px;
+	justify-content: flex-start;
+}
+
+/* Desktop: the conversation and the composer in one calm column. */
+.pa-shell:not(.pa-small) .pa-compose {
+	width: min(800px, 100% - 48px);
+	margin-inline: auto;
+	padding-inline: 0;
+}
+.pa-shell:not(.pa-small) .pa-chat-head {
+	border-bottom: 0;
+}
+
+/* Nothing moves with "reduce motion" or motion "off". */
+@media (prefers-reduced-motion: reduce) {
+	.pa-shimmer,
+	.pa-enter,
+	.pa-md .pa-word,
+	.pa-progress u,
+	.pa-stop circle,
+	.pa-stop-shape {
+		animation: none !important;
+	}
+	.pa-shimmer {
+		color: inherit;
+		background: none;
+	}
+	.pa-md .pa-word {
+		opacity: 1;
+	}
+}
+.pa-ui[data-motion='off'] :is(.pa-shimmer, .pa-enter, .pa-word, .pa-progress u, .pa-stop circle) {
+	animation: none !important;
+}
+.pa-ui[data-motion='off'] .pa-shimmer {
+	color: inherit;
+	background: none;
+}
+
+/* The phone names the chat in its head; no second title. */
+.pa-small .pa-chat-head {
+	display: none;
+}
+.pa-ui .pa-button.pa-new {
+	background: color-mix(in srgb, var(--pa-accent) 16%, var(--pa-navigation));
+	font-weight: 600;
+	padding: 11px 14px;
+}
+.pa-ui .pa-round-count {
+	color: #1a1204;
+}
+
+/* Below the composer the home bar of the iPhone keeps its room; with the
+   keyboard open the composer sits right on the keyboard. */
+.pa-small .pa-compose {
+	padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+}
+html.pa-keyboard .pa-small .pa-compose {
+	padding-bottom: 8px;
+}
+
+/* The menu behind ☰ on the phone (Drawer.svelte): iOS side panel. */
+.pa-ui .pa-drawer {
+	position: fixed;
+	inset: 0 auto 0 0;
+	width: min(88vw, 400px);
+	z-index: 60;
+	display: flex;
+	flex-direction: column;
+	background: var(--pa-background);
+	border-radius: 0 28px 28px 0;
+	box-shadow: 12px 0 40px rgb(0 0 0 / 0.35);
+	padding-top: calc(12px + max(9px, env(safe-area-inset-top)));
+	outline: none;
+}
+.pa-drawer-scrim {
+	z-index: 59;
+}
+.pa-drawer-top {
+	display: flex;
+	justify-content: space-between;
+	padding: 0 14px;
+}
+.pa-ui .pa-drawer-title {
+	font-size: 30px;
+	line-height: 1.15;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	margin: 14px 20px 10px;
+}
+.pa-drawer-body {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 0 14px calc(18px + env(safe-area-inset-bottom, 0px));
+	display: grid;
+	align-content: start;
+	gap: 18px;
+}
+/* Search like iOS: a filled, rounded field with the magnifier inside. */
+.pa-drawer-body > input[type='search'] {
+	border: 0 !important;
+	border-radius: 12px !important;
+	min-height: 40px;
+	padding: 8px 12px 8px 36px !important;
+	background: color-mix(in srgb, var(--pa-text) 10%, var(--pa-background))
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%239aa3ad' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E")
+		no-repeat 11px 50% !important;
+	font-size: 16px;
+}
+/* Grouped lists: rounded cards, rows with lines that start after the icon. */
+.pa-drawer-card,
+.pa-drawer .pa-chat-card {
+	background: var(--pa-navigation);
+	border-radius: 22px;
+	overflow: hidden;
+}
+.pa-drawer .pa-history {
+	display: grid;
+	gap: 18px;
+	padding: 0;
+}
+.pa-drawer .pa-chat-group {
+	display: grid;
+	gap: 6px;
+}
+.pa-drawer .pa-group {
+	margin: 0 16px;
+	font-size: 13px;
+	font-weight: 600;
+	text-transform: none;
+}
+.pa-ui .pa-drawer-nav button,
+.pa-ui .pa-drawer .pa-chat-row > button:first-child {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	width: 100%;
+	min-height: 52px;
+	padding: 12px 16px;
+	border-radius: 0;
+	text-align: start;
+	position: relative;
+	font-size: 16px;
+	background: none;
+}
+.pa-ui .pa-drawer-nav button > span:first-of-type {
+	flex: 1;
+}
+.pa-drawer-nav button::after {
+	content: '›';
+	font-size: 22px;
+	line-height: 1;
+	color: var(--pa-muted);
+	margin-left: 4px;
+}
+.pa-drawer-nav button + button::before,
+.pa-drawer .pa-chat-row + .pa-chat-row::before,
+.pa-drawer .pa-chat-tools + .pa-chat-row::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 52px;
+	right: 0;
+	border-top: 1px solid var(--pa-line);
+}
+.pa-drawer .pa-chat-row + .pa-chat-row::before,
+.pa-drawer .pa-chat-tools + .pa-chat-row::before {
+	left: 16px;
+}
+.pa-drawer .pa-chat-row {
+	position: relative;
+	display: flex;
+	align-items: center;
+	margin: 0;
+}
+.pa-ui .pa-drawer .pa-chat-row > button:first-child {
+	flex: 1;
+	padding-right: 4px;
+}
+.pa-ui .pa-drawer .pa-chat-row > button[aria-current='page'],
+.pa-ui .pa-drawer-nav button[aria-current='page'] {
+	background: color-mix(in srgb, var(--pa-accent) 14%, transparent);
+	font-weight: 600;
+}
+.pa-ui .pa-drawer .pa-chat-more {
+	width: 44px;
+	height: 44px;
+	margin-right: 6px;
+	border-radius: 50%;
+}
+.pa-drawer .pa-chat-tools {
+	margin: 0 12px 12px;
+	border-radius: 16px;
+}
+.pa-drawer-nav .pa-count {
+	min-width: 22px;
+	height: 22px;
+	border-radius: 11px;
+	display: grid;
+	place-items: center;
+	padding: 0 7px;
+	font-size: 12px;
+	background: var(--pa-wait);
+	color: #1a1204;
+	position: static;
+}
+.pa-drawer-account {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 16px;
+}
+.pa-drawer-account div {
+	display: grid;
+}
+.pa-drawer-account small {
+	color: var(--pa-muted);
+}
+.pa-avatar {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	font-weight: 700;
+	background: color-mix(in srgb, var(--pa-accent) 22%, var(--pa-navigation));
+	color: var(--pa-accent);
+	flex: none;
+}
+.pa-ui .pa-drawer .pa-history {
+	overflow: visible;
+	max-height: none;
+	flex: none;
+}
+.pa-drawer-body {
+	display: flex;
+	flex-direction: column;
+}
+.pa-drawer-body > *,
+.pa-ui .pa-drawer .pa-history {
+	flex: none;
+	height: auto;
+	min-height: auto;
+}

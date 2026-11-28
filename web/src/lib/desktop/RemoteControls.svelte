@@ -346,8 +346,8 @@
 		font-size: var(--text-sm);
 	}
 	.phone-head {
-		min-height: calc(52px + env(safe-area-inset-top));
-		padding: env(safe-area-inset-top) var(--space-1-5) 0;
+		min-height: calc(64px + env(safe-area-inset-top));
+		padding: calc(12px + env(safe-area-inset-top)) var(--space-1-5) 0;
 		gap: var(--space-1);
 	}
 	.title {

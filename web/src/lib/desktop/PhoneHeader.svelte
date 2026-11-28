@@ -148,7 +148,7 @@
 		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 		align-items: center;
 		gap: 6px;
-		padding: calc(12px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 5px
+		padding: calc(24px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 5px
 			max(14px, env(safe-area-inset-left));
 		color: white;
 		position: relative;
@@ -220,7 +220,7 @@
 	.library {
 		box-sizing: border-box;
 		position: fixed;
-		inset: calc(10px + env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) auto
+		inset: calc(22px + env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) auto
 			max(8px, env(safe-area-inset-left));
 		width: auto;
 		max-width: 700px;

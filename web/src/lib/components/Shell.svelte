@@ -191,7 +191,7 @@
 		const root = document.documentElement.style;
 		root.setProperty(
 			'--header-height',
-			frame === 'phone' ? 'calc(52px + env(safe-area-inset-top))' : '0px',
+			frame === 'phone' ? 'calc(64px + env(safe-area-inset-top))' : '0px',
 		);
 		return () => root.removeProperty('--header-height');
 	});
