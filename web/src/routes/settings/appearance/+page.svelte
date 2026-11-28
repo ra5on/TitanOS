@@ -712,11 +712,11 @@
 				{/snippet}
 			</SettingRow>
 			{#if barLink.phoneBottom === 'dock'}<SettingRow title={t('phone.nord.size')}>
-				{#snippet control()}<PhoneDockSize
-						size={inWindow ? barLink.phoneSize : phoneDockSize(desktop.prefs.phone.dock.size)}
-						onchange={setPhoneDockSize}
-					/>{/snippet}
-			</SettingRow>{/if}
+					{#snippet control()}<PhoneDockSize
+							size={inWindow ? barLink.phoneSize : phoneDockSize(desktop.prefs.phone.dock.size)}
+							onchange={setPhoneDockSize}
+						/>{/snippet}
+				</SettingRow>{/if}
 		</SettingGroup>
 	{/if}
 </div>

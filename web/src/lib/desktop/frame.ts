@@ -38,7 +38,13 @@ export type FrameMessage =
 	/** PLAN 79-10, Settings › Appearance: a window asks whether the top bar shows CPU and RAM. */
 	| { type: 'titanos-bar-get' }
 	/** The answer, and after every change on the desktop. */
-	| { type: 'titanos-bar'; load: boolean; phoneDock?: boolean; phoneSize?: unknown; phoneBottom?: unknown }
+	| {
+			type: 'titanos-bar';
+			load: boolean;
+			phoneDock?: boolean;
+			phoneSize?: unknown;
+			phoneBottom?: unknown;
+	  }
 	/** A window switches CPU and RAM in the top bar on or off; the desktop saves it. */
 	| { type: 'titanos-bar-set'; load: boolean }
 	// PLAN 87: the phone's dock, switched in Settings › Appearance › Dock.

@@ -158,12 +158,7 @@
 		aria-label={up === '/' ? t('desktop.phone.home') : t('desktop.phone.up')}
 		><Icon name="chevronLeft" size={22} /></button
 	>
-	{#if app}<DesktopIcon
-			glyph={app.glyph}
-			gradient={app.gradient}
-			size={30}
-			name=""
-		/>{/if}
+	{#if app}<DesktopIcon glyph={app.glyph} gradient={app.gradient} size={30} name="" />{/if}
 	<!-- §121: without the bar at the bottom the home screen stays one tap away from every level. -->
 	{#if up !== '/' && phoneBottom(desktop.prefs.phone) !== 'tabs'}<a
 			class="back"

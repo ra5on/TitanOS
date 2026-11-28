@@ -49,8 +49,7 @@
 		<a
 			href={tab.href}
 			aria-current={current === tab.id ? 'page' : undefined}
-			data-sveltekit-noscroll
-			><Icon name={tab.icon} size={22} /><span>{t(tab.label)}</span></a
+			data-sveltekit-noscroll><Icon name={tab.icon} size={22} /><span>{t(tab.label)}</span></a
 		>
 	{/each}
 </nav>

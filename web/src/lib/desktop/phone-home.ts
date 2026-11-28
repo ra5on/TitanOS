@@ -130,14 +130,19 @@ function sanitizeStart(value: unknown): StartPrefs | undefined {
 	const v = value as Record<string, unknown>;
 	const pick = (list: unknown) =>
 		Array.isArray(list)
-			? [...new Set(list.filter((x): x is StartSection => START_SECTIONS.includes(x as StartSection)))]
+			? [
+					...new Set(
+						list.filter((x): x is StartSection => START_SECTIONS.includes(x as StartSection)),
+					),
+				]
 			: [];
 	const start: StartPrefs = { order: pick(v.order), hidden: pick(v.hidden) };
 	if (Array.isArray(v.folders))
 		start.folders = [
 			...new Set(
 				v.folders.filter(
-					(f): f is string => typeof f === 'string' && f.length > 0 && f.length <= 80 && !/[\x00-\x1f/]/.test(f),
+					(f): f is string =>
+						typeof f === 'string' && f.length > 0 && f.length <= 80 && !/[\x00-\x1f/]/.test(f),
 				),
 			),
 		].slice(0, 8);
