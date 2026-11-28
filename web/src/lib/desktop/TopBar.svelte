@@ -10,6 +10,9 @@
 	import NodeMenu from '../components/NodeMenu.svelte';
 	import Notifications from '../components/Notifications.svelte';
 	import TasksPanel from '../components/TasksPanel.svelte';
+	import LiveUsage from '../components/LiveUsage.svelte';
+	import { appForPath } from './apps.ts';
+	import { openProgram } from './programs.svelte.ts';
 	import { clusterNodes } from '../cluster.svelte.ts';
 	import { formatPercent } from '../format.ts';
 	import { i18n, t } from '../i18n/index.svelte.ts';
@@ -61,6 +64,21 @@
 
 	// Date and time on the right of the top bar.
 	let now = $state(new Date());
+	// §121: "Live-Nutzung" at the load display; a click beside it closes it.
+	let liveOpen = $state(false);
+	function outside(node: HTMLElement) {
+		const anchor = node.parentElement;
+		const down = (e: PointerEvent) => {
+			if (anchor && !anchor.contains(e.target as Node)) liveOpen = false;
+		};
+		document.addEventListener('pointerdown', down, true);
+		node.focus({ preventScroll: true });
+		return { destroy: () => document.removeEventListener('pointerdown', down, true) };
+	}
+	function openHref(href: string) {
+		const app = appForPath(new URL(href, location.origin).pathname);
+		if (app) void openProgram('app:' + app.id, { href });
+	}
 	$effect(() => {
 		const timer = setInterval(() => (now = new Date()), 15_000);
 		return () => clearInterval(timer);
@@ -138,12 +156,43 @@
 		<TasksPanel badge {onactivity} />
 		{#if role !== 'user'}<Notifications compact />{/if}
 		{#if info && desktop.prefs.barLoad}
-			<span class="load" title={t('desktop.widget.cpu') + ' · ' + t('desktop.widget.ram')}
-				>{t('menubar.load', {
-					cpu: formatPercent(info.cpu.usagePercent),
-					ram: formatPercent(memPct),
-				})}</span
-			>
+			<!-- §121: the load opens "Live-Nutzung" – the values and what each app uses. -->
+			<span class="live-anchor">
+				<button
+					type="button"
+					class="load"
+					aria-expanded={liveOpen}
+					aria-haspopup="dialog"
+					title={t('live.open')}
+					onclick={() => (liveOpen = !liveOpen)}
+					>{t('menubar.load', {
+						cpu: formatPercent(info.cpu.usagePercent),
+						ram: formatPercent(memPct),
+					})}</button
+				>
+				{#if liveOpen}
+					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+					<div
+						class="live-pop"
+						role="dialog"
+						tabindex="-1"
+						aria-label={t('live.title')}
+						onkeydown={(e) => e.key === 'Escape' && (liveOpen = false)}
+						use:outside
+					>
+						<div class="live-head">
+							<b>{t('live.title')}</b>
+							<button
+								type="button"
+								class="live-close"
+								aria-label={t('live.close')}
+								onclick={() => (liveOpen = false)}><Icon name="close" size={16} /></button
+							>
+						</div>
+						<LiveUsage onnavigate={() => (liveOpen = false)} onopen={openHref} />
+					</div>
+				{/if}
+			</span>
 		{/if}
 		<time class="clock" datetime={now.toISOString()}
 			><span class="date">{dateText}</span><span class="time">{timeText}</span></time
@@ -248,6 +297,57 @@
 		height: calc(var(--pb) * 0.6);
 		margin: 0 var(--space-1);
 		background: color-mix(in srgb, var(--text) 18%, transparent);
+	}
+	.live-anchor {
+		position: relative;
+		display: flex;
+	}
+	button.load {
+		font: inherit;
+		cursor: pointer;
+	}
+	.load[aria-expanded='true'] {
+		color: var(--text);
+		border-color: var(--accent);
+	}
+	.live-pop {
+		position: absolute;
+		top: calc(100% + 8px);
+		right: 0;
+		width: min(620px, calc(100vw - 24px));
+		max-height: calc(100dvh - var(--bar-h) - 40px);
+		overflow-y: auto;
+		padding: 16px;
+		border-radius: 18px;
+		border: 1px solid var(--border);
+		background: var(--surface);
+		box-shadow: 0 20px 60px rgb(0 0 0 / 0.45);
+		color: var(--text);
+		font-size: var(--text-base);
+		z-index: 9600;
+	}
+	.live-pop:focus {
+		outline: none;
+	}
+	.live-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 12px;
+	}
+	.live-head b {
+		font-size: 1.15rem;
+	}
+	.live-close {
+		display: grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		border: 0;
+		border-radius: 8px;
+		background: none;
+		color: var(--muted);
+		cursor: pointer;
 	}
 	.load {
 		margin: 0 var(--space-1);

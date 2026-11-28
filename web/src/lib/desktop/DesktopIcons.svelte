@@ -262,10 +262,11 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
+	/* §121: only whole words break, never with a hyphen. */
 	.ico .label {
 		max-width: 100%;
 		overflow-wrap: break-word;
-		hyphens: auto;
+		hyphens: manual;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
