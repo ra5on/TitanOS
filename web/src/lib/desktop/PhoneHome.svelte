@@ -1203,10 +1203,16 @@
 		color: var(--text);
 		text-shadow: 0 0 3px rgb(255 255 255 / 0.9);
 	}
+	/* §121: names break only between whole words, never with a hyphen; a
+	   long single word ("Systemcontainer") gets the width of its column and
+	   a slightly smaller type on narrow phones instead. */
 	.label {
-		max-width: 84px;
-		hyphens: auto;
-		overflow-wrap: anywhere;
+		max-width: calc(100% + 6px);
+		hyphens: manual;
+		overflow-wrap: normal;
+		word-break: keep-all;
+		font-size: min(11.5px, 2.85vw);
+		letter-spacing: -0.01em;
 		line-height: 1.2;
 	}
 	.wrap {
