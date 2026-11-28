@@ -144,10 +144,7 @@
 	{:else}
 		<div class="section-head">
 			<h2>{t('docker.table.title')}</h2>
-			<select class="field" bind:value={p.filter} aria-label={t('docker.filter')}
-				>{#each p.FILTERS as [id, label] (id)}<option value={id}>{t(label)} · {p.counts[id]}</option
-					>{/each}</select
-			><button
+			<button
 				class="btn"
 				aria-label={t('docker.search')}
 				aria-expanded={searching}
@@ -156,6 +153,17 @@
 					if (!searching) p.search = '';
 				}}><Icon name="search" size={18} /></button
 			>
+		</div>
+		<!-- §121: the filters as buttons in a row of their own, not a system list. -->
+		<div class="chips" role="group" aria-label={t('docker.filter')}>
+			{#each p.FILTERS as [id, label] (id)}
+				<button
+					type="button"
+					class="chip-btn"
+					aria-pressed={p.filter === id}
+					onclick={() => (p.filter = id)}>{t(label)} {p.counts[id]}</button
+				>
+			{/each}
 		</div>
 		{#if searching}<input
 				type="search"
@@ -207,9 +215,26 @@
 		font-size: var(--text-md);
 		margin: 0;
 	}
-	.section-head select {
-		max-width: 46%;
-		min-width: 0;
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.chip-btn {
+		min-height: 40px;
+		padding: 0 14px;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+		background: var(--surface);
+		color: var(--text);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.chip-btn[aria-pressed='true'] {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: var(--on-accent);
 	}
 	.section-head .btn {
 		width: 44px;

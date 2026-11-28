@@ -111,5 +111,15 @@
 	"phone.nord.healthy": "Volumes healthy",
 	"phone.nord.noFavorites": "No favorites selected",
 	"phone.nord.noNotices": "No new notifications",
-	"phone.nord.pages": "Pages and widgets"
+	"phone.nord.pages": "Pages and widgets",
+	"phone.tabs.label": "Main sections",
+	"phone.tabs.start": "Start",
+	"phone.tabs.apps": "Apps",
+	"phone.tabs.files": "Files",
+	"phone.tabs.account": "Account",
+	"phone.settings.bottom": "At the bottom of the phone",
+	"phone.settings.bottomHint": "The bar leads to Start, Apps, Files and Account. The dock shows apps of your choice; press and hold it to change its size and apps.",
+	"phone.settings.bottom.tabs": "Bar",
+	"phone.settings.bottom.dock": "Dock",
+	"phone.settings.bottom.none": "Nothing"
 }

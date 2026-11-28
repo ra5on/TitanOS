@@ -33,6 +33,9 @@
 	import type Desktop from '#lib/desktop/Desktop.svelte';
 	import type PhoneHome from '#lib/desktop/NordlichtHome.svelte';
 	import PhoneDock from '#lib/desktop/PhoneDock.svelte';
+	import PhoneTabBar from '#lib/desktop/PhoneTabBar.svelte';
+	import { phoneBottom } from '#lib/desktop/phone-home.ts';
+	import { desktop } from '#lib/desktop/wm.svelte.ts';
 	import { phoneChrome } from '#lib/desktop/immersive-phone.svelte.ts';
 	import PhoneBar from '#lib/desktop/PhoneBar.svelte';
 	// PLAN 87: gestures (edge = back, pull = refresh) and the notifications pulled down.
@@ -49,6 +52,13 @@
 	let { children }: { children: Snippet } = $props();
 	// PLAN 66: once a web app was full screen on the phone it stays mounted (it guards unsaved work on Back).
 	let phoneApp = $state(false);
+	// A program full screen (remote view, web app, VM screen) has neither dock nor bar.
+	const phoneFull = $derived(
+		!!page.state.remote ||
+			!!page.state.webapp ||
+			phoneApp ||
+			page.url.pathname.startsWith('/vms/screen'),
+	);
 	$effect(() => {
 		if (page.state.webapp) phoneApp = true;
 	});
@@ -315,13 +325,11 @@
 			{@render children()}
 		</main>
 	{/if}
-	<PhoneDock
-		home={page.url.pathname === '/'}
-		full={!!page.state.remote ||
-			!!page.state.webapp ||
-			phoneApp ||
-			page.url.pathname.startsWith('/vms/screen')}
-	/>
+	<PhoneDock home={page.url.pathname === '/'} full={phoneFull} />
+	<!-- §121: the bar Start · Apps · Dateien · Konto, unless the account chose the dock or nothing. -->
+	{#if phoneBottom(desktop.prefs.phone) === 'tabs' && !phoneFull && !phoneChrome.immersive && page.url.searchParams.get('phone') !== 'pages'}
+		<PhoneTabBar />
+	{/if}
 	<PhoneGestures />
 	<!-- PLAN 66: a web app full screen (opened from the home grid or the file manager). -->
 	{#if page.state.webapp || phoneApp}

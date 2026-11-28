@@ -14,10 +14,7 @@
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { phoneView } from '#lib/desktop/mode.svelte.ts';
 	import { page } from '$app/state';
-	import { appForPath, SYSTEM_APPS } from '#lib/desktop/apps.ts';
-	import Icon from './Icon.svelte';
-	import { clusterNodes } from '#lib/cluster.svelte.ts';
-	import { activeNode } from '#lib/cluster-node.ts';
+	import { SYSTEM_APPS } from '#lib/desktop/apps.ts';
 	import Dropdown from './Dropdown.svelte';
 	import { settingsCrumbs } from '#lib/settings-search.ts';
 	import { session } from '#lib/session.svelte.ts';
@@ -48,15 +45,10 @@
 	});
 
 	const phone = $derived(phoneView());
-	// On the phone the bar above names the program: the page's name only when it differs.
+	// §121: on the phone the one bar above names the page and the NAS.
 	const mobileHeading = $derived(
 		phone && /^\/(settings|apps|docker|notifications)(\/|$)/.test(page.url.pathname),
 	);
-	const host = $derived(
-		clusterNodes.nodes.find((n) => n.id === activeNode())?.name || session.data?.hostname,
-	);
-	const program = $derived(appForPath(page.url.pathname));
-	const ownName = $derived(!program || t(program.label) !== title);
 	// A bar only with something in it: actions or the page's name on the phone.
 	// PLAN 74: in a window the intro alone gets no strip of its own; it is the
 	// first line of the page (no room lost above the content).
@@ -112,7 +104,8 @@
 			if (pagePath.value === shown) pagePath.value = [];
 		};
 	});
-	const hasBar = $derived(!!actions || (phone && ownName && !pathHead));
+	// §121: on the phone the bar above names the page; a strip of its own only for actions.
+	const hasBar = $derived(!!actions);
 
 	// Buttons that can move into the "⋯" menu: plain buttons and links of the
 	// bar, never the main action, a field, a group or a button with a menu of
@@ -226,8 +219,9 @@
 		class:beside={pathHead}
 		bind:this={bar}
 	>
-		{#if mobileHeading || pathHead}{:else if phone && ownName}
-			<h1 class="win-title" {id}>{title}</h1>
+		{#if mobileHeading || pathHead}{:else if phone}
+			<!-- §121: on the phone the one bar above names the page. -->
+			<h1 class="sr-only" {id}>{title}</h1>
 		{:else}
 			<h1 class="sr-only" {id}>{title}</h1>
 		{/if}
@@ -259,10 +253,8 @@
 {/snippet}
 
 {#if mobileHeading}
-	<header class="nord-page-head">
-		<h1 {id}>{section ?? title}</h1>
-		{#if host}<span><Icon name="disk" size={14} />{host}</span>{/if}
-	</header>
+	<!-- §121: the phone's one bar shows the page and the NAS; the page keeps its name for screen readers. -->
+	<h1 class="sr-only" {id}>{section ?? title}</h1>
 	{#if actions}<div class="nord-tools">{@render toolbar()}</div>{/if}
 	{#if children}<div class="win-intro alone">{@render children()}</div>{/if}
 {:else if pathHead && inWindow}
@@ -330,13 +322,6 @@
 	/* Never cut off, never over each other (owner 10.11.2026): the name keeps
 	   its words, the controls keep their width; what does not fit beside
 	   the name takes the next row. */
-	.win-title {
-		flex: 0 1 auto;
-		max-width: 100%;
-		font-size: var(--text-md);
-		font-weight: 600;
-		overflow-wrap: break-word;
-	}
 	.win-actions {
 		flex: 1 1 auto;
 		min-width: min-content;

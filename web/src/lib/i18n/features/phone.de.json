@@ -111,5 +111,15 @@
 	"phone.nord.healthy": "Volumes in Ordnung",
 	"phone.nord.noFavorites": "Keine Favoriten ausgewählt",
 	"phone.nord.noNotices": "Keine neuen Meldungen",
-	"phone.nord.pages": "Seiten und Widgets"
+	"phone.nord.pages": "Seiten und Widgets",
+	"phone.tabs.label": "Hauptbereiche",
+	"phone.tabs.start": "Start",
+	"phone.tabs.apps": "Apps",
+	"phone.tabs.files": "Dateien",
+	"phone.tabs.account": "Konto",
+	"phone.settings.bottom": "Unten am Handy",
+	"phone.settings.bottomHint": "Die Leiste führt zu Start, Apps, Dateien und Konto. Das Dock zeigt eigene Apps; halte es gedrückt, um Größe und Belegung zu ändern.",
+	"phone.settings.bottom.tabs": "Leiste",
+	"phone.settings.bottom.dock": "Dock",
+	"phone.settings.bottom.none": "Nichts"
 }
