@@ -93,6 +93,17 @@ func uiHandler(ui fs.FS, frames ...func() []string) http.Handler {
 		}
 
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+		// 1.39 (owner 28.11.2026: after an update Safari showed nothing until
+		// its website data was cleared): a file of the build that this
+		// version does not have is a 404, never index.html. A page of the
+		// previous version asks for its own chunks after an update; with the
+		// HTML as a 200 answer the service worker kept it under the chunk's
+		// name and every later load failed with "MIME type text/html".
+		if (name == "_app" || strings.HasPrefix(name, "_app/")) && !isFile(ui, name) {
+			w.Header().Set("Cache-Control", "no-store")
+			http.NotFound(w, r)
+			return
+		}
 		if name == "" || !isFile(ui, name) {
 			// index.html references hashed files and must never be cached,
 			// otherwise the browser keeps an old UI after an update.

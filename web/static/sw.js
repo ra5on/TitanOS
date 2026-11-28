@@ -29,12 +29,26 @@ self.addEventListener('activate', (event) =>
 // it saw (lib/offline.svelte.ts). The hashed files of the UI
 // (/_app/immutable/) are kept as the page loads them: a part of TitanOS
 // that was never opened with the NAS is not there without it. A new
-// version of the UI (another entry file in the HTML) empties the kept files.
-const SHELL_CACHE = 'titanos-shell-v1';
-const ASSET_CACHE = 'titanos-assets-v1';
+// version of the UI (another build version in the HTML) empties the kept
+// files.
+// 1.39 (owner 28.11.2026: after an update Safari showed nothing until its
+// website data was cleared): only scripts, styles, fonts and data are kept,
+// never a page; a kept page under a chunk's name is dropped and fetched
+// anew. The version is the build's own (`version: "…"` in the HTML), not
+// the start file, which often stays the same from one release to the
+// next. The caches are "-v2": the first start of this worker removes the
+// "-v1" caches, so a phone that kept a broken file heals by itself.
+const SHELL_CACHE = 'titanos-shell-v2';
+const ASSET_CACHE = 'titanos-assets-v2';
 const SHELL_WAIT_MS = 6000;
 const NOT_APP = /^\/(api|_app|webapps|manual|icons|backgrounds|share-target)(\/|$)/;
 const ENTRY = /\/_app\/immutable\/entry\/start\.[A-Za-z0-9_-]+\.js/;
+const BUILD = /\bversion:\s*"([^"]+)"/;
+// What may be kept as a file of the UI: never HTML.
+const KEEPABLE =
+	/^(text\/javascript|application\/javascript|text\/css|font\/|application\/font|application\/json|application\/wasm|image\/)/;
+const fileType = (res) => KEEPABLE.test((res.headers.get('Content-Type') || '').toLowerCase());
+const keepable = (res) => res.ok && res.type === 'basic' && fileType(res);
 
 function appRoute(url) {
 	if (NOT_APP.test(url.pathname)) return false;
@@ -53,14 +67,15 @@ async function keepShell(url, res) {
 		const html = await res.clone().text();
 		const entry = html.match(ENTRY)?.[0];
 		if (!entry) return;
+		const build = html.match(BUILD)?.[1] ?? entry;
 		const cache = await caches.open(SHELL_CACHE);
 		const before = await cache.match('/__shell/version');
 		const version = before ? await before.text() : '';
-		if (version !== entry) {
+		if (version !== build) {
 			// Another version of the UI: its files replace the kept ones.
 			await caches.delete(ASSET_CACHE);
 			for (const key of ['/__shell/main', '/__shell/agent']) await cache.delete(key);
-			await cache.put('/__shell/version', new Response(entry));
+			await cache.put('/__shell/version', new Response(build));
 		}
 		const headers = new Headers(res.headers);
 		headers.set('X-TitanOS-Kept', '1');
@@ -101,10 +116,11 @@ async function navigate(event, url) {
 async function asset(event) {
 	const cache = await caches.open(ASSET_CACHE);
 	const hit = await cache.match(event.request);
-	if (hit) return hit;
+	if (hit && fileType(hit)) return hit;
+	// A page kept under a file's name (before 1.39) is never answered.
+	if (hit) await cache.delete(event.request).catch(() => {});
 	const res = await fetch(event.request);
-	if (res.ok && res.type === 'basic')
-		event.waitUntil(cache.put(event.request, res.clone()).catch(() => {}));
+	if (keepable(res)) event.waitUntil(cache.put(event.request, res.clone()).catch(() => {}));
 	return res;
 }
 
@@ -124,7 +140,9 @@ function notificationTarget(path) {
 	try {
 		const url = new URL(typeof path === 'string' ? path : '/', self.location.origin);
 		if (url.origin === self.location.origin && path?.startsWith('/')) return url;
-	} catch { /* An invalid link opens the app home. */ }
+	} catch {
+		/* An invalid link opens the app home. */
+	}
 	return new URL('/', self.location.origin);
 }
 
@@ -139,15 +157,23 @@ self.addEventListener('push', (event) => {
 	const url = target.pathname + target.search + target.hash;
 	event.waitUntil(
 		Promise.all([
-		Number.isSafeInteger(message.badge) && message.badge >= 0 ?
-			Promise.resolve().then(() => message.badge ? self.navigator?.setAppBadge?.(message.badge) : self.navigator?.clearAppBadge?.()).catch(() => {}) : undefined,
-		self.registration.showNotification(message.title || 'TitanOS', {
-			body: message.body || '',
-			tag: message.tag || undefined,
-			icon: '/icons/app-192.png',
-			badge: '/icons/app-192.png',
-			data: { url, ...(message.test ? { test: message.test } : {}) },
-		})]),
+			Number.isSafeInteger(message.badge) && message.badge >= 0
+				? Promise.resolve()
+						.then(() =>
+							message.badge
+								? self.navigator?.setAppBadge?.(message.badge)
+								: self.navigator?.clearAppBadge?.(),
+						)
+						.catch(() => {})
+				: undefined,
+			self.registration.showNotification(message.title || 'TitanOS', {
+				body: message.body || '',
+				tag: message.tag || undefined,
+				icon: '/icons/app-192.png',
+				badge: '/icons/app-192.png',
+				data: { url, ...(message.test ? { test: message.test } : {}) },
+			}),
+		]),
 	);
 });
 
@@ -161,8 +187,13 @@ self.addEventListener('notificationclick', (event) => {
 			if (receipt?.device && receipt?.user && receipt?.sent) {
 				try {
 					const cache = await caches.open('titanos-push-test');
-					await cache.put('/__push/opened', new Response(JSON.stringify({ ...receipt, opened: new Date().toISOString() })));
-				} catch { /* The notification still opens with storage disabled. */ }
+					await cache.put(
+						'/__push/opened',
+						new Response(JSON.stringify({ ...receipt, opened: new Date().toISOString() })),
+					);
+				} catch {
+					/* The notification still opens with storage disabled. */
+				}
 			}
 			const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 			const same = windows.filter((c) => new URL(c.url).origin === self.location.origin);

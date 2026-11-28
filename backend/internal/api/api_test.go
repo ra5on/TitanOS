@@ -692,7 +692,6 @@ func TestUI(t *testing.T) {
 	}{
 		{"root", "/", "<title>index</title>", "no-cache"},
 		{"client-side route", "/storage/volumes", "<title>index</title>", "no-cache"},
-		{"directory", "/_app/immutable/", "<title>index</title>", "no-cache"},
 		{"file", "/favicon.svg", "<svg/>", "no-cache"},
 		{"hashed file", "/_app/immutable/entry/app.js", "console.log(1)", "public, max-age=31536000, immutable"},
 	}
@@ -712,6 +711,14 @@ func TestUI(t *testing.T) {
 				t.Error("X-Frame-Options missing")
 			}
 		})
+	}
+	// 1.39: a missing file of the build is a 404, never the page (the
+	// service worker of an older page would keep the HTML as the chunk).
+	for _, target := range []string{"/_app/immutable/", "/_app/immutable/nodes/9.old.js", "/_app/version.json"} {
+		res, body := ts.request("GET", target, nil)
+		if res.StatusCode != http.StatusNotFound || strings.Contains(string(body), "<title>") {
+			t.Errorf("GET %s: %d %q, want 404 without the page", target, res.StatusCode, body)
+		}
 	}
 	if res, _ := ts.request("POST", "/", nil); res.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("POST /: %d, want 405", res.StatusCode)

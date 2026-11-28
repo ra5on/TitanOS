@@ -53,7 +53,7 @@ fragt erst nach einem Tipp), sonst unter KI-Agent › Einstellungen ›
 Mitteilungen. Jedes Gerät trägt seine App (`app`: `titanos` oder `agent`;
 Geräte älterer Fassungen gelten als TitanOS), die Liste nennt sie. Die
 Mitteilungen des Agenten zu einem Chat (Tag `agent-<chat>`) gehen an die
-Agent-Geräte des Kontos, alle anderen an die TitanOS-Geräte; hat ein
+Agent-Geräte des Kontos, seit 1.39 ebenso die des persönlichen Agenten zu einem Auftrag (Tag `personal-agent-<auftrag>`; bis 1.38 galten sie als TitanOS-Meldung und erreichten die Agent-App nie, sobald irgendwo ein TitanOS-Browser angemeldet war), alle anderen an die TitanOS-Geräte; hat ein
 Konto nur Geräte der einen App (oder hat sie die Art abgeschaltet),
 gehen sie dorthin, damit nichts verloren geht (`webpush.pick`,
 `TestMessagesGoToTheirApp`). Derselbe Service Worker `/sw.js` mit dem
