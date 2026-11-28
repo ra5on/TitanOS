@@ -16,7 +16,7 @@
 	import { system } from '#lib/system.svelte.ts';
 	import Icon from './Icon.svelte';
 
-	let { variant }: { variant: 'desk' | 'phone' | 'hero' } = $props();
+	let { variant }: { variant: 'desk' | 'phone' | 'hero' | 'start' } = $props();
 
 	const id = $props.id();
 	let open = $state(false);
@@ -108,6 +108,10 @@
 			<span class="dot" class:away={!current?.self && !current?.online} aria-hidden="true"></span>
 			<span class="mono name">{currentName}</span>
 			<Icon name="chevronDown" size={14} />
+		{:else if variant === 'start'}
+			<!-- §121: the phone's start page – the NAS's name as its title, the arrow switches. -->
+			<span class="current-name">{currentName}</span>
+			<Icon name="chevronDown" size={18} />
 		{:else}
 			<span class="current-name">{currentName}</span>
 			<span class="switch-label"
@@ -158,8 +162,40 @@
 </div>
 
 <style>
-	.hero {
+	.hero,
+	.start {
 		color: white;
+	}
+	.start .trigger {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 44px;
+		max-width: 100%;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		text-shadow: inherit;
+		cursor: pointer;
+	}
+	.start .current-name {
+		font-size: 1.55rem;
+		font-weight: 700;
+		letter-spacing: -0.03em;
+		line-height: 1.15;
+		overflow-wrap: anywhere;
+		text-align: start;
+	}
+	.start .menu {
+		font-size: 1rem;
+		font-weight: 400;
+		text-shadow: none;
+		left: 0;
+		right: auto;
+		top: 100%;
+		color: var(--text);
 	}
 	.single {
 		padding: 10px;

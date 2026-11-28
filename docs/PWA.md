@@ -33,6 +33,15 @@ Die installierte App öffnet sich auch, wenn das NAS nicht antwortet (Handy offl
 - **Während der Arbeit:** Antwortet das NAS nicht mehr, steht am Arbeitsplatz, auf dem Startbildschirm des Handys und in der Agent-App ein Hinweis unter der Statusleiste (`role="status"`, „Jetzt prüfen“; die anderen Seiten haben ihren bisherigen Hinweis). Änderungen gehen dann nicht ab: `api.ts` lehnt sie sofort mit „Das NAS ist gerade nicht erreichbar …“ ab, nichts wartet in einer Warteschlange; ein eingegebener Text bleibt stehen. Ein Upload, der schon lief, wartet wie bisher sichtbar („erneuter Versuch“) und setzt fort, wo das NAS aufhörte; ein neuer beginnt nicht.
 - **Grenzen:** Ein Teil der Oberfläche, der nie mit dem NAS geöffnet war, fehlt ohne NAS (seine Dateien sind nicht gehalten). Hintergrundbilder und Symbole hält der Worker nicht. iOS: Cache Storage gibt es, Background Sync nicht; Safari kann gehaltene Daten einer selten genutzten Web-App löschen, und eine App auf dem Home-Bildschirm hat eigenen Speicher – die Agent-App merkt sich ihren Stand selbst. Getestet in Chromium (`scripts/test-ui-offline.mjs`: Handy offline, NAS aus bei Netz, gesperrt, Hinweis während der Arbeit, nichts von der API gehalten; vitest `offline.test.ts`), nicht auf einem echten iPhone.
 
+## WebKit in der Home-Bildschirm-App (seit 1.37, §121)
+
+- **Bildschirm bleibt an** (Screen Wake Lock, `lib/wake-lock.svelte.ts`): während der VM-Bildschirm verbunden ist, in der NVR-Live-Ansicht und solange Dateien hochgeladen werden; nach dem Zurückkehren in die App neu angefordert. Ohne die Schnittstelle geschieht nichts.
+- **Haptik bei Schaltern:** auf iPhone und iPad bekommen Schalter (`input.switch`) das Attribut `switch` (Safari 18+), das Aussehen bleibt das von TitanOS. Ob WebKit dabei mit `appearance: none` die Haptik gibt, ist auf einem echten iPhone nicht geprüft.
+- **Auswahlfelder** im Handy-Rahmen mit `appearance: base-select` (Safari 27, Chrome) in den Farben von TitanOS; sonst die Auswahl des Systems.
+- **Mitwandernder Titel:** der große Titel der Apps-Seite wird beim Scrollen kleiner (`animation-timeline: scroll()`, Safari 26), nicht bei „Bewegung reduzieren“. Seitenwechsel gleiten wie bisher mit „Seitenübergänge“ (View Transitions).
+- `<meta name="color-scheme" content="dark light">`: der „Adaptive Dark Mode“ von Safari 27.3 lässt die Oberfläche unverändert.
+- Nicht verfügbar in Web-Apps auf dem iPhone bzw. nicht genutzt: Teilen-Ziel, Kurzbefehle beim langen Drücken auf das Symbol (vermutlich nur Android), Vibration, Hintergrund-Synchronisierung, Ausrichtung sperren.
+
 ## Grenzen
 
 - Nur über HTTPS (oder localhost), weil Service Worker sonst nicht laufen. Ohne Zertifikat (Let's Encrypt, `docs/LETSENCRYPT.md`) bietet der Browser weder Installieren noch Teilen an.

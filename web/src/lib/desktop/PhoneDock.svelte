@@ -7,7 +7,7 @@
 	import DesktopIcon from './DesktopIcon.svelte';
 	import PhoneCustomize from './PhoneCustomize.svelte';
 	import PhoneDockHandle from './PhoneDockHandle.svelte';
-	import { PHONE_DOCK_DEFAULT, phoneDockSize } from './phone-home.ts';
+	import { PHONE_DOCK_DEFAULT, phoneBottom, phoneDockSize } from './phone-home.ts';
 	import { phoneHold } from './phone-hold.ts';
 	import { openPhoneProgram } from './phone-open.ts';
 	import { phoneChrome } from './immersive-phone.svelte.ts';
@@ -59,6 +59,8 @@
 		};
 	}
 	const dock = $derived(desktop.prefs.phone.dock);
+	// §121: the dock stands at the bottom only when the account chose it instead of the bar.
+	const shown = $derived(phoneBottom(desktop.prefs.phone) === 'dock');
 	const byKey = $derived(new Map(programs().map((p) => [p.key, p])));
 	const pins = $derived(
 		(dock.custom ? dock.apps : PHONE_DOCK_DEFAULT).flatMap((key) => {
@@ -68,7 +70,7 @@
 	);
 	const size = $derived({ small: 33, medium: 44, large: 55 }[phoneDockSize(dock.size)]);
 	$effect(() => {
-		if (phoneChrome.dock && dock.show) {
+		if (phoneChrome.dock && shown) {
 			dialog?.showModal();
 			void tick().then(() => homeButton?.focus({ preventScroll: true }));
 		} else dialog?.close();
@@ -79,7 +81,7 @@
 			!home &&
 			(phoneChrome.dock ||
 				phoneChrome.customize ||
-				(dock.show && dock.apps.some((k) => !k.startsWith('app:'))))
+				(shown && dock.apps.some((k) => !k.startsWith('app:'))))
 		)
 			return watchSources();
 	});
@@ -156,7 +158,7 @@
 			>{/if}
 	</nav>
 {/snippet}
-{#if dock.show}
+{#if shown}
 	{#if resting}
 		<div class="resting" use:reserve>{@render tray(false)}</div>
 	{:else if !phoneChrome.immersive && !pages}

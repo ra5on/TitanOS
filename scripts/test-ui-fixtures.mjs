@@ -1250,6 +1250,19 @@ export function fixtureFactory(browser, errors) {
         path === "/usb"
       )
         return json([]);
+      // §121: the storage ring of the phone's start page.
+      if (path === "/vms/space") return json({ bytes: 42e9 });
+      if (path === "/docker/df")
+        return json({
+          images: { count: 6, size: 21e9, reclaimable: 0 },
+          containers: { count: 2, size: 1e9, reclaimable: 0 },
+          volumes: { count: 3, size: 16e9, reclaimable: 0 },
+          anonymousReclaimable: 0,
+          buildCache: { count: 0, size: 0, reclaimable: 0 },
+          reclaimable: 0,
+          measuredAt: time,
+          measuring: false,
+        });
       // Settings › Data and backup › System data (PLAN 79-8).
       if (path === "/system/data") {
         if (method === "PUT") {

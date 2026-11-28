@@ -38,12 +38,20 @@ export type FrameMessage =
 	/** PLAN 79-10, Settings › Appearance: a window asks whether the top bar shows CPU and RAM. */
 	| { type: 'titanos-bar-get' }
 	/** The answer, and after every change on the desktop. */
-	| { type: 'titanos-bar'; load: boolean; phoneDock?: boolean; phoneSize?: unknown }
+	| {
+			type: 'titanos-bar';
+			load: boolean;
+			phoneDock?: boolean;
+			phoneSize?: unknown;
+			phoneBottom?: unknown;
+	  }
 	/** A window switches CPU and RAM in the top bar on or off; the desktop saves it. */
 	| { type: 'titanos-bar-set'; load: boolean }
 	// PLAN 87: the phone's dock, switched in Settings › Appearance › Dock.
 	| { type: 'titanos-phone-dock-set'; show: boolean }
 	| { type: 'titanos-phone-dock-size'; size: unknown }
+	// §121: the bar, the dock or nothing at the bottom of the phone.
+	| { type: 'titanos-phone-bottom-set'; bottom: unknown }
 	/** PLAN 84-2, Settings › Access: a window asks for the automatic lock (answer: titanos-lock). */
 	| { type: 'titanos-lock-get' }
 	/** The answer, and after every change on the desktop: minutes, 0 = never. */
@@ -57,7 +65,7 @@ export type FrameMessage =
 	/** The NVR's window changes the arrangement or a view option; the desktop checks and saves it. */
 	| { type: 'titanos-nvr-set'; prefs: unknown }
 	/** A window asks the desktop to open one of its dialogs (the wallpaper). */
-	| { type: 'titanos-desk-dialog'; dialog: 'wallpaper' }
+	| { type: 'titanos-desk-dialog'; dialog: 'wallpaper' | 'restart' | 'shutdown' }
 	| { type: 'titanos-console'; session: unknown }
 	/** PLAN 66: the file manager in a window drags files (null: the drag ended). */
 	| { type: 'titanos-file-drag'; drag: { root: string; paths: string[] } | null }

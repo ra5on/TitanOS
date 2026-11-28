@@ -6,7 +6,8 @@
 	// tab every part; the schedule tab the start and stop times. The CD drive
 	// can be changed on both, also while the VM runs.
 	import { poll } from '#lib/poll.ts';
-	import { api, ApiError, type Hardware, type Volume, type VM } from '#lib/api.ts';
+	import { api, ApiError, type Hardware, type Volume, type VM, type VMStatus } from '#lib/api.ts';
+	import VmHardware from './VmHardware.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import SettingGroup from '#lib/components/settings/SettingGroup.svelte';
 	import SettingRow from '#lib/components/settings/SettingRow.svelte';
@@ -28,6 +29,9 @@
 		onchanged: () => void;
 		onsnapshots: () => void;
 		part?: 'overview' | 'hardware' | 'schedule';
+		/** §121: the machine's CPUs and memory and whether the bridge exists (hardware tab). */
+		host?: VMStatus['host'];
+		bridge?: boolean;
 	};
 	let {
 		vm,
@@ -39,6 +43,8 @@
 		onchanged,
 		onsnapshots,
 		part = 'overview',
+		host,
+		bridge = false,
 	}: Props = $props();
 	const editHref = $derived(`/vms/edit?vm=${encodeURIComponent(vm.name)}`);
 
@@ -327,7 +333,7 @@
 		</SettingGroup>
 	{/if}
 
-	{#if part === 'overview' || part === 'hardware'}
+	{#if part === 'overview'}
 		<SettingGroup title={t('vms.ov.network')} id="ov-network">
 			{#if running}
 				<SettingRow title={t('vms.ov.address')}>
@@ -483,34 +489,28 @@
 	{/if}
 
 	{#if part === 'hardware'}
+		<!-- §121: processor, memory, disk, start and network set in their rows. -->
+		<div class="wide">
+			<VmHardware {vm} {host} {bridge} {busy} {onchanged} />
+		</div>
 		<SettingGroup title={t('vms.ov.hardware')} id="hw-system" tools={editButton}>
 			<SettingRow title={t('vms.ov.system')}>
 				{#snippet control()}<span>{t(`vms.template.${vm.template}`)}</span>{/snippet}
 			</SettingRow>
-			<SettingRow title={t('vms.ov.cpus')}>
-				{#snippet control()}<span
-						>{vm.vcpus} vCPU{#if vm.cpuPin?.length}{' · '}{t('vms.ov.pinned', {
-								cpus: vm.cpuPin.join(', '),
-							})}{/if}{#if vm.exclusive}{' · '}{t('vms.ov.exclusive')}{/if}</span
-					>{/snippet}
-			</SettingRow>
-			<SettingRow title={t('vms.ov.memory')}>
-				{#snippet control()}<span>{formatBytes(vm.memoryMiB * 1024 * 1024)}</span>{/snippet}
-			</SettingRow>
-			<SettingRow title={t('vms.ov.firmware')}>
-				{#snippet control()}<span
-						>{[
-							vm.firmware === 'bios' ? 'BIOS' : 'UEFI',
-							vm.secureBoot ? 'Secure Boot' : '',
-							vm.tpm ? 'TPM 2.0' : '',
-						]
-							.filter(Boolean)
-							.join(' · ')}</span
-					>{/snippet}
-			</SettingRow>
-			<SettingRow title={t('vms.autostart')}>
-				{#snippet control()}<span>{t(vm.autostart ? 'vms.ov.yes' : 'vms.ov.no')}</span>{/snippet}
-			</SettingRow>
+			{#if vm.cpuPin?.length || vm.exclusive}<SettingRow title={t('vms.ov.cpus')}>
+					{#snippet control()}<span
+							>{#if vm.cpuPin?.length}{t('vms.ov.pinned', {
+									cpus: vm.cpuPin.join(', '),
+								})}{/if}{#if vm.exclusive}{' · '}{t('vms.ov.exclusive')}{/if}</span
+						>{/snippet}
+				</SettingRow>{/if}
+			{#if vm.secureBoot || vm.tpm}<SettingRow title={t('vms.ov.firmware')}>
+					{#snippet control()}<span
+							>{[vm.secureBoot ? 'Secure Boot' : '', vm.tpm ? 'TPM 2.0' : '']
+								.filter(Boolean)
+								.join(' · ')}</span
+						>{/snippet}
+				</SettingRow>{/if}
 		</SettingGroup>
 
 		<SettingGroup title={t('vms.ov.disks')} id="ov-disks">

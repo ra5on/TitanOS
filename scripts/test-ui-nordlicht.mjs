@@ -102,13 +102,12 @@ async function check(width) {
     await page.waitForURL(
       (url) => url.pathname === new URL(href, base).pathname,
     );
-    await page.locator(".nord-page-head").waitFor();
+    // §121: one bar names the page; the programs are in the tab "Apps".
+    await page.locator("header.phone-bar .heading b").waitFor();
+    assert.equal(await page.locator(".nord-page-head").count(), 0);
     assert.notEqual(new URL(page.url()).pathname, "/settings");
-    await page.locator("[data-menu-button]").click();
-    await page
-      .locator('dialog[open] [data-key="app:appcenter"] button')
-      .first()
-      .click();
+    await page.locator('[data-phone-tabs] a[href="/?phone=apps"]').click();
+    await page.locator('[data-phone-apps] [data-home-key="app:appcenter"]').click();
     await page.waitForURL("**/apps");
     const tabs = page.locator(".nord-segments");
     await page.locator(".card", { hasText: "Fotosammlung" }).waitFor();
@@ -126,11 +125,8 @@ async function check(width) {
     assert.equal(await page.locator(".card").count(), 1);
     await page.locator(".card").click();
     await page.waitForURL("**/apps/install/titanos/music");
-    await page.locator("[data-menu-button]").click();
-    await page
-      .locator('dialog[open] [data-key="app:docker"] button')
-      .first()
-      .click();
+    await page.locator('[data-phone-tabs] a[href="/?phone=apps"]').click();
+    await page.locator('[data-phone-apps] [data-home-key="app:docker"]').click();
     await page.waitForURL("**/docker");
     await page.locator(".container-row").first().waitFor();
     await shot("docker");

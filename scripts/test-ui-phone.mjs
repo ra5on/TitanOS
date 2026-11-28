@@ -106,20 +106,21 @@ async function phone(width, height, { cluster = true, node = "" } = {}) {
   });
   await page.goto(base + "/");
   await page.locator("[data-nord-home]").waitFor({ timeout: 15000 });
-  const menu = await page.locator(".nord-header [data-menu-button]").boundingBox();
-  const tools = await page.locator(".nord-header .tools").boundingBox();
-  assert.ok(menu.x < 24 && menu.height >= 44, "Nordlicht menu is a full touch target at the left");
-  assert.ok(Math.abs(menu.width - tools.width) <= 1, "the two header controls balance the centered brand");
+  // §121: the start page – the NAS's name with its switcher, search and bell as round buttons.
+  const search = await page.getByRole("button", { name: "Programme und Seiten suchen …", exact: true }).first().boundingBox();
+  assert.ok(search && search.width >= 44 && search.height >= 44, "search is a full touch target");
+  assert.equal(await page.locator(".nord-header").count(), 0, "no bar of the old start page");
   if (cluster) {
-    await page.locator(".hero .trigger").tap();
-    const menu = page.locator(".hero [role=menu]");
+    await page.locator(".start .trigger").tap();
+    const menu = page.locator(".start [role=menu]");
     await menu.getByRole("menuitemradio", {name:/thor/}).waitFor();
     assert.equal(await menu.getByRole("menuitemradio", {name:/loki/}).isDisabled(), true);
     const box = await menu.boundingBox();
     assert.ok(box.x >= 0 && box.x + box.width <= width, "the cluster menu fits the home screen");
     await page.keyboard.press("Escape");
   }
-  await page.getByRole("button", { name: "Seiten und Widgets" }).tap();
+  // The pages with widgets of PLAN 87 stay reachable (Anpassen › Seiten mit Widgets).
+  await page.goto(base + "/?phone=pages");
   await page.locator(".home").waitFor();
   await page.waitForTimeout(900);
   return made;
@@ -323,7 +324,8 @@ for (const [width, height] of [
   const { ctx, page } = await phone(390, 844, { node: "n2" });
   // PLAN 87: Docker sits in the phone's dock (no label there, its name is the button's).
   await page.locator('.home [data-home-key="app:docker"]').first().tap();
-  const chip = page.locator("header.phone-bar .node");
+  // §121: the bar names the node below the program, marked while another node is managed.
+  const chip = page.locator("header.phone-bar .heading small.managing");
   await chip.waitFor();
   assert.equal((await chip.textContent()).trim(), "thor");
   await page.waitForTimeout(800);
@@ -331,14 +333,12 @@ for (const [width, height] of [
   await ctx.close();
 }
 
-// Not in a cluster: no switcher.
+// Not in a cluster: the switcher names this NAS by its own host name
+// (WEB-UI.md, Nordlicht auf dem Handy) and offers no other NAS.
 {
   const { ctx, page } = await phone(390, 844, { cluster: false });
-  assert.equal(
-    await page.locator(".home .node").count(),
-    0,
-    "no switcher without a cluster",
-  );
+  const name = (await page.locator(".home .node .current-name").textContent()).trim();
+  assert.equal(name, "titan-test", "the switcher names this NAS");
   await ctx.close();
 }
 

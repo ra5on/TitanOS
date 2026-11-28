@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { keepAwake } from '#lib/wake-lock.svelte.ts';
 	import { apiSocket } from '#lib/cluster-node.ts';
 	// The screen of a running VM: noVNC in the browser, a WebSocket to
 	// titand, QEMU's VNC server behind it.
@@ -49,6 +50,10 @@
 		onkeyboard = () => {},
 	}: Props = $props();
 
+	// §121: the screen of the phone or tablet stays on while the VM's screen is shown.
+	let showing = $state(false);
+	keepAwake(() => showing);
+
 	let target = $state<HTMLElement>();
 	let root = $state<HTMLElement>();
 	let field = $state<HTMLTextAreaElement>();
@@ -97,12 +102,14 @@
 			connection.background = 'var(--screen-bg)';
 			applyMode();
 			connection.addEventListener('connect', () => {
+				showing = true;
 				onstatus('connected');
 				if (!touch || document.activeElement !== field) connection.focus({ preventScroll: true });
 				centerCursor();
 			});
 			connection.addEventListener('disconnect', () => {
 				rfb = undefined;
+				showing = false;
 				if (closed) return;
 				// The VM restarts, or it is off; the page above knows which.
 				onstatus('lost');

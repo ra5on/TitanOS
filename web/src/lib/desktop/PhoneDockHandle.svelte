@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { t } from '#lib/i18n/index.svelte.ts';
 	import { desktop } from './wm.svelte.ts';
+	import { phoneBottom } from './phone-home.ts';
 	import { phoneChrome } from './immersive-phone.svelte.ts';
 	let start: { x: number; y: number; id: number } | null = null;
 	function down(e: PointerEvent) {
@@ -20,7 +21,7 @@
 	}
 </script>
 
-{#if desktop.prefs.phone.dock.show}
+{#if phoneBottom(desktop.prefs.phone) === 'dock'}
 	<button
 		type="button"
 		class="dock-handle"

@@ -10,7 +10,8 @@
 	import { watchSources } from './sources.svelte.ts';
 	import Launcher from './Launcher.svelte';
 
-	let { showHome = false }: { showHome?: boolean } = $props();
+	// §121: `bare` keeps only the menu with its search (the start page draws its own head).
+	let { showHome = false, bare = false }: { showHome?: boolean; bare?: boolean } = $props();
 	let dialog: HTMLDialogElement;
 	let search: HTMLInputElement;
 	let launcher = $state<Launcher>();
@@ -38,58 +39,60 @@
 	}
 </script>
 
-<header class="nord-header">
-	<button
-		class="pill menu-button"
-		type="button"
-		data-menu-button
-		aria-haspopup="dialog"
-		onclick={() => showMenu()}
-	>
-		<Icon name="menu" size={16} /><span>{t('desktop.menu.title')}</span>
-	</button>
-	{#if showHome}
-		<a
-			class="pill brand home-link"
-			href="/"
-			aria-label={t('desktop.phone.home')}
-			title={t('desktop.phone.home')}
-		>
-			<Icon name="home" size={21} />TitanOS
-		</a>
-	{:else}
-		<span class="brand"><img src="/favicon.svg" alt="" width="27" height="27" />TitanOS</span>
-	{/if}
-	<span class="pill tools">
-		<button type="button" aria-label={t('desktop.menu.search')} onclick={() => showMenu(true)}
-			><Icon name="search" size={17} /></button
-		>
+{#if !bare}
+	<header class="nord-header">
 		<button
+			class="pill menu-button"
 			type="button"
-			aria-label={t('phone.nord.customize')}
-			onclick={() => {
-				phoneChrome.customizeDock = false;
-				phoneChrome.customize = true;
-			}}
+			data-menu-button
+			aria-haspopup="dialog"
+			onclick={() => showMenu()}
 		>
-			<svg
-				width="18"
-				height="18"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="1.7"
-				stroke-linecap="round"
-				aria-hidden="true"
-				><path d="M4 8h5m5 0h6M4 16h9m5 0h2" /><circle cx="11" cy="8" r="2.3" /><circle
-					cx="15.5"
-					cy="16"
-					r="2.3"
-				/></svg
-			>
+			<Icon name="menu" size={16} /><span>{t('desktop.menu.title')}</span>
 		</button>
-	</span>
-</header>
+		{#if showHome}
+			<a
+				class="pill brand home-link"
+				href="/"
+				aria-label={t('desktop.phone.home')}
+				title={t('desktop.phone.home')}
+			>
+				<Icon name="home" size={21} />TitanOS
+			</a>
+		{:else}
+			<span class="brand"><img src="/favicon.svg" alt="" width="27" height="27" />TitanOS</span>
+		{/if}
+		<span class="pill tools">
+			<button type="button" aria-label={t('desktop.menu.search')} onclick={() => showMenu(true)}
+				><Icon name="search" size={17} /></button
+			>
+			<button
+				type="button"
+				aria-label={t('phone.nord.customize')}
+				onclick={() => {
+					phoneChrome.customizeDock = false;
+					phoneChrome.customize = true;
+				}}
+			>
+				<svg
+					width="18"
+					height="18"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.7"
+					stroke-linecap="round"
+					aria-hidden="true"
+					><path d="M4 8h5m5 0h6M4 16h9m5 0h2" /><circle cx="11" cy="8" r="2.3" /><circle
+						cx="15.5"
+						cy="16"
+						r="2.3"
+					/></svg
+				>
+			</button>
+		</span>
+	</header>
+{/if}
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <dialog
 	bind:this={dialog}

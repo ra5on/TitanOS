@@ -3,7 +3,14 @@
 // in a window of the desktop the page asks the desktop and sends the change
 // back (the desktop is the only writer of its settings); without a desktop
 // (phone, own tab) it uses the store of this page.
-import { phoneDockSize, type PhoneDockSize } from './phone-home.ts';
+import {
+	PHONE_BOTTOMS,
+	phoneBottom,
+	phoneDockSize,
+	withBottom,
+	type PhoneBottom,
+	type PhoneDockSize,
+} from './phone-home.ts';
 import { frameMessage, inWindow } from './frame.ts';
 import { desktop, loadDesktop, savePrefs } from './wm.svelte.ts';
 
@@ -11,10 +18,13 @@ export const barLink = $state<{
 	load: boolean | null;
 	phoneDock: boolean | null;
 	phoneSize: PhoneDockSize;
+	/** §121: the bar, the dock or nothing at the bottom of the phone. */
+	phoneBottom: PhoneBottom | null;
 }>({
 	load: null,
 	phoneDock: null,
 	phoneSize: 'medium',
+	phoneBottom: null,
 });
 
 /** Starts following the setting; returns the function that stops it. */
@@ -24,6 +34,7 @@ export function connectBar(): () => void {
 		barLink.load = desktop.prefs.barLoad;
 		barLink.phoneDock = desktop.prefs.phone.dock.show;
 		barLink.phoneSize = phoneDockSize(desktop.prefs.phone.dock.size);
+		barLink.phoneBottom = phoneBottom(desktop.prefs.phone);
 		return () => {};
 	}
 	const message = (event: MessageEvent) => {
@@ -34,6 +45,12 @@ export function connectBar(): () => void {
 			// PLAN 87: the phone's dock; a desktop of 0.80 does not send it (on).
 			barLink.phoneDock = msg.phoneDock !== false;
 			barLink.phoneSize = phoneDockSize(msg.phoneSize);
+			// §121: a desktop before 1.37 does not send it; it follows the dock then.
+			barLink.phoneBottom = PHONE_BOTTOMS.includes(msg.phoneBottom as PhoneBottom)
+				? (msg.phoneBottom as PhoneBottom)
+				: barLink.phoneDock
+					? 'tabs'
+					: 'none';
 		}
 	};
 	window.addEventListener('message', message);
@@ -60,4 +77,12 @@ export function setPhoneDockSize(size: PhoneDockSize) {
 	if (inWindow)
 		window.parent.postMessage({ type: 'titanos-phone-dock-size', size }, location.origin);
 	else savePrefs((p) => (p.phone.dock.size = size));
+}
+
+/** §121: what stands at the bottom of the phone (Settings › Appearance › Dock). */
+export function setPhoneBottom(bottom: PhoneBottom) {
+	barLink.phoneBottom = bottom;
+	if (inWindow)
+		window.parent.postMessage({ type: 'titanos-phone-bottom-set', bottom }, location.origin);
+	else savePrefs((p) => (p.phone = withBottom(p.phone, bottom)));
 }

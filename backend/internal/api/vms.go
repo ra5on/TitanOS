@@ -105,6 +105,8 @@ func (a vmsArea) register(mux *routeMux, g guards) {
 	mux.HandleFunc("POST /api/v1/vms", g.heavyAppAdmin(a.handleVMCreate))
 	mux.HandleFunc("GET /api/v1/vms/media", g.admin(a.handleVMMedia))
 	mux.HandleFunc("GET /api/v1/vms/host", g.admin(a.handleVMHost))
+	// §121: what the VMs take on the volumes, for the storage ring of the phone.
+	mux.HandleFunc("GET /api/v1/vms/space", g.admin(a.handleVMSpace))
 	// Taking a VM over from the copy of its settings on a volume.
 	mux.HandleFunc("GET /api/v1/vms/adopt", g.admin(a.handleVMAdoptable))
 	mux.HandleFunc("POST /api/v1/vms/adopt", g.appAdmin(a.handleVMAdopt))
@@ -321,6 +323,10 @@ func (a vmsArea) handleVMHost(w http.ResponseWriter, r *http.Request) {
 		// VT-x/AMD-V and the IOMMU, with what to switch on where.
 		"virt": a.vmVirtualization(r),
 	})
+}
+
+func (a vmsArea) handleVMSpace(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]int64{"bytes": a.vms.SpaceUsed()})
 }
 
 func (a vmsArea) handleVMGrow(w http.ResponseWriter, r *http.Request) {

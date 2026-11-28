@@ -5,7 +5,6 @@
 	import { goto } from '$app/navigation';
 	import Icon from '../components/Icon.svelte';
 	import { t } from '../i18n/index.svelte.ts';
-	import PhoneHeader from './PhoneHeader.svelte';
 	import DesktopIcon from './DesktopIcon.svelte';
 	import { sideFor, appForPath, sideActive } from './apps.ts';
 	import { nvr } from '../nvr/nvr.svelte.ts';
@@ -20,7 +19,9 @@
 	import { settingsGroupOf, settingsMenu } from '../settings-search.ts';
 	import { mailUp } from '../tmail/levels.ts';
 	import { contactsUp } from '../pim/contact-levels.ts';
-	import { pagePath } from '../page-title.svelte.ts';
+	import { pagePath, pageTitle } from '../page-title.svelte.ts';
+	import { phoneBottom } from './phone-home.ts';
+	import { desktop } from './wm.svelte.ts';
 
 	// PLAN 87: the bell, and pulling the bar down shows the notifications.
 	const unread = $derived(unreadCount());
@@ -54,7 +55,11 @@
 	const globalHeader = $derived(
 		/^\/(settings|apps|docker|notifications)(\/|$)/.test(page.url.pathname),
 	);
-	const title = $derived(pagePath.value.at(-1)?.label ?? (app ? t(app.label) : ''));
+	// §121: one bar names the page (its path's last place, else the page's own
+	// title, else the program) and the NAS below it.
+	const title = $derived(
+		pagePath.value.at(-1)?.label || pageTitle.value || (app ? t(app.label) : ''),
+	);
 	// The arrow goes one level up: in the settings from a page to its area,
 	// from an area to the list of areas, and only from there (and from every
 	// other program) to the home screen.
@@ -134,42 +139,41 @@
 	// PLAN 64: while this tab manages another node of the cluster, its name stays in sight.
 	const nodeId = activeNode();
 	const node = $derived(nodeId ? clusterNodes.nodes.find((n) => n.id === nodeId) : undefined);
+	const host = $derived(node?.name || session.data?.hostname || '');
 </script>
 
-{#if globalHeader}<PhoneHeader showHome />{/if}
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <header
 	class="phone-bar"
-	class:global-header={globalHeader}
 	ontouchstart={pullStart}
 	ontouchmove={pullMove}
 	ontouchend={pullEnd}
 	ontouchcancel={pullEnd}
 	style:--pulled="{Math.min(pulled, 80)}px"
 >
-	{#if !globalHeader || up !== '/'}
-		<button
-			type="button"
+	<button
+		type="button"
+		class="back"
+		onclick={() => goto(up, up === '/notifications' ? { state: page.state } : {})}
+		aria-label={up === '/' ? t('desktop.phone.home') : t('desktop.phone.up')}
+		><Icon name="chevronLeft" size={22} /></button
+	>
+	{#if app}<DesktopIcon glyph={app.glyph} gradient={app.gradient} size={30} name="" />{/if}
+	<!-- §121: without the bar at the bottom the home screen stays one tap away from every level. -->
+	{#if up !== '/' && phoneBottom(desktop.prefs.phone) !== 'tabs'}<a
 			class="back"
-			onclick={() => goto(up, up === '/notifications' ? { state: page.state } : {})}
-			aria-label={up === '/' ? t('desktop.phone.home') : t('desktop.phone.up')}
-			><Icon name="chevronLeft" size={22} />{#if globalHeader}<span>{t('files.back')}</span
-				>{/if}</button
-		>
-	{/if}
-	{#if app && !globalHeader}<DesktopIcon
-			glyph={app.glyph}
-			gradient={app.gradient}
-			size={26}
-			name={t(app.label)}
-		/>{/if}
-	{#if !globalHeader}<b>{title}</b>{/if}
-	<span class="space"></span>
-	{#if node}<span
-			class="node mono"
-			title={t('cluster.managing', { name: node.name })}
-			aria-label={t('cluster.managing', { name: node.name })}>{node.name}</span
+			href="/"
+			aria-label={t('desktop.phone.home')}
+			title={t('desktop.phone.home')}><Icon name="home" size={20} /></a
 		>{/if}
+	<span class="heading">
+		<b>{title}</b>
+		{#if host}<small
+				class:managing={!!node}
+				title={node ? t('cluster.managing', { name: node.name }) : undefined}
+				aria-label={node ? t('cluster.managing', { name: node.name }) : undefined}>{host}</small
+			>{/if}
+	</span>
 	{#if page.url.pathname !== '/notifications'}
 		<button
 			type="button"
@@ -254,26 +258,6 @@
 </header>
 
 <style>
-	.phone-bar.global-header {
-		position: relative;
-		top: auto;
-		height: auto;
-		min-height: 44px;
-		padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
-		background: transparent;
-		border: 0;
-		color: inherit;
-	}
-	.global-header .back:first-child {
-		display: flex;
-		align-items: center;
-		justify-content: flex-start;
-		width: auto;
-		min-width: 44px;
-		gap: 4px;
-		font: inherit;
-	}
-
 	.phone-bar {
 		position: sticky;
 		top: 0;
@@ -287,16 +271,22 @@
 		background: var(--header);
 		border-bottom: 1px solid var(--border);
 	}
-	.node {
-		max-width: 38%;
-		padding: var(--space-1) var(--space-2-5);
-		border-radius: 999px;
-		border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
-		background: color-mix(in srgb, var(--accent) 14%, transparent);
+	.heading {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		flex: 1;
+		line-height: 1.2;
+	}
+	.heading small {
+		color: var(--muted);
 		font-size: var(--text-sm);
-		flex: none;
-		overflow-wrap: break-word;
-		hyphens: auto;
+		overflow-wrap: anywhere;
+	}
+	/* While this tab manages another node of the cluster, its name stands out. */
+	.heading small.managing {
+		color: var(--accent);
+		font-weight: 600;
 	}
 	.bell {
 		position: relative;
@@ -319,6 +309,9 @@
 	.phone-bar {
 		touch-action: pan-x;
 	}
+	a.back {
+		text-decoration: none;
+	}
 	.back {
 		width: 44px;
 		height: 44px;
@@ -332,11 +325,8 @@
 	}
 	b {
 		min-width: 0;
+		font-size: 1.02rem;
 		overflow-wrap: break-word;
-		hyphens: auto;
-	}
-	.space {
-		flex: 1;
 	}
 	/* The ⋯ button stays above the dimmed page: a second tap closes the sheet. */
 	.back[aria-expanded='true'] {

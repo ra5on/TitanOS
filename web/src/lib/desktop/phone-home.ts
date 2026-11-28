@@ -38,9 +38,30 @@ export type PhoneDock = {
 	custom: boolean;
 };
 
+/**
+ * §121: what stands at the bottom of the phone – the bar Start · Apps ·
+ * Dateien · Konto ("tabs"), the dock of PLAN 87 ("dock") or nothing. Optional:
+ * versions before 1.37 ignore it and keep following `dock.show`.
+ */
+export const PHONE_BOTTOMS = ['tabs', 'dock', 'none'] as const;
+export type PhoneBottom = (typeof PHONE_BOTTOMS)[number];
+
+/** §121: the sections of the phone's start page, in their order. */
+export const START_SECTIONS = ['values', 'apps', 'folders', 'storage', 'notices'] as const;
+export type StartSection = (typeof START_SECTIONS)[number];
+export type StartPrefs = {
+	/** The sections in the account's order; `hidden` ones are left out. */
+	order: StartSection[];
+	hidden: StartSection[];
+	/** The quick folders as share names; undefined = the first four shares. */
+	folders?: string[];
+};
+
 export type PhonePrefs = {
 	/** Undefined uses the starter set; an empty list is an explicit choice. */
 	favorites?: string[];
+	bottom?: PhoneBottom;
+	start?: StartPrefs;
 	/** Whether the account arranged the home screen (false: built from the programs). */
 	custom: boolean;
 	/** The pages, each a list of programs ("app:files"), folders ("folder:x") and widgets ("widget:x") in order. */
@@ -82,6 +103,50 @@ function name(value: unknown): string {
 				.trim()
 				.slice(0, 60)
 		: '';
+}
+
+/** §121: what stands at the bottom; without a choice the bar, or nothing for an account that switched the dock off. */
+export function phoneBottom(p: PhonePrefs): PhoneBottom {
+	return p.bottom ?? (p.dock.show ? 'tabs' : 'none');
+}
+
+/** §121: chooses what stands at the bottom; "Nichts" also switches the dock off, so the pages and older versions leave it out too. */
+export function withBottom(p: PhonePrefs, bottom: PhoneBottom): PhonePrefs {
+	return { ...p, bottom, dock: { ...p.dock, show: bottom !== 'none' } };
+}
+
+/** §121: the start page's sections in order, every known one once (new ones at the end). */
+export function startSections(p: PhonePrefs): { id: StartSection; shown: boolean }[] {
+	const order = [
+		...(p.start?.order ?? []).filter((id) => START_SECTIONS.includes(id)),
+		...START_SECTIONS.filter((id) => !p.start?.order.includes(id)),
+	];
+	const hidden = new Set(p.start?.hidden ?? []);
+	return [...new Set(order)].map((id) => ({ id, shown: !hidden.has(id) }));
+}
+
+function sanitizeStart(value: unknown): StartPrefs | undefined {
+	if (typeof value !== 'object' || value === null) return undefined;
+	const v = value as Record<string, unknown>;
+	const pick = (list: unknown) =>
+		Array.isArray(list)
+			? [
+					...new Set(
+						list.filter((x): x is StartSection => START_SECTIONS.includes(x as StartSection)),
+					),
+				]
+			: [];
+	const start: StartPrefs = { order: pick(v.order), hidden: pick(v.hidden) };
+	if (Array.isArray(v.folders))
+		start.folders = [
+			...new Set(
+				v.folders.filter(
+					(f): f is string =>
+						typeof f === 'string' && f.length > 0 && f.length <= 80 && !/[\x00-\x1f/]/.test(f),
+				),
+			),
+		].slice(0, 8);
+	return start;
 }
 
 /** Reads what the NAS sent; anything unknown or broken falls back to the standard. */
@@ -140,6 +205,8 @@ export function sanitizePhone(input: unknown): PhonePrefs {
 	return {
 		custom: v.custom === true,
 		...(Array.isArray(v.favorites) ? { favorites: keys(v.favorites, 80) } : {}),
+		...(PHONE_BOTTOMS.includes(v.bottom as PhoneBottom) ? { bottom: v.bottom as PhoneBottom } : {}),
+		...(sanitizeStart(v.start) ? { start: sanitizeStart(v.start) } : {}),
 		pages,
 		folders,
 		widgets,

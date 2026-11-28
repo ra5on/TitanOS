@@ -1,6 +1,6 @@
 <script lang="ts">
 	import PhoneDockSize from '#lib/desktop/PhoneDockSize.svelte';
-	import { phoneDockSize } from '#lib/desktop/phone-home.ts';
+	import { PHONE_BOTTOMS, phoneDockSize } from '#lib/desktop/phone-home.ts';
 	import { setPhoneDockSize } from '#lib/desktop/bar-link.svelte.ts';
 
 	// Settings › Appearance (PLAN 64): one simple page – theme, accent and five
@@ -44,7 +44,7 @@
 	import { replaceState } from '$app/navigation';
 	import DockSettings from './DockSettings.svelte';
 	import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
-	import { barLink, connectBar, setBarLoad, setPhoneDock } from '#lib/desktop/bar-link.svelte.ts';
+	import { barLink, connectBar, setBarLoad, setPhoneBottom } from '#lib/desktop/bar-link.svelte.ts';
 
 	// PLAN 79-10: CPU and RAM in the top bar of the desktop (per account).
 	onMount(() => connectBar());
@@ -692,29 +692,31 @@
 	<!-- PLAN 87: the phone's home screen has a dock of its own. -->
 	{#if barLink.phoneDock !== null}
 		<SettingGroup title={t('phone.settings.title')} id="h-phone">
+			<!-- §121: the bar Start · Apps · Dateien · Konto, the dock or nothing. -->
 			<SettingRow
-				title={t('phone.settings.dock')}
-				desc={t('phone.settings.dockHint')}
-				for="phone-dock"
-				summary={barLink.phoneDock ? t('look.on') : t('look.off')}
+				title={t('phone.settings.bottom')}
+				desc={t('phone.settings.bottomHint')}
+				summary={t(`phone.settings.bottom.${barLink.phoneBottom ?? 'tabs'}`)}
 			>
 				{#snippet control()}
-					<input
-						id="phone-dock"
-						type="checkbox"
-						role="switch"
-						class="switch"
-						checked={barLink.phoneDock}
-						onchange={(e) => setPhoneDock(e.currentTarget.checked)}
+					<Segments
+						compact
+						label={t('phone.settings.bottom')}
+						value={barLink.phoneBottom ?? 'tabs'}
+						options={PHONE_BOTTOMS.map((value) => ({
+							value,
+							label: t(`phone.settings.bottom.${value}`),
+						}))}
+						onchange={setPhoneBottom}
 					/>
 				{/snippet}
 			</SettingRow>
-			<SettingRow title={t('phone.nord.size')}>
-				{#snippet control()}<PhoneDockSize
-						size={inWindow ? barLink.phoneSize : phoneDockSize(desktop.prefs.phone.dock.size)}
-						onchange={setPhoneDockSize}
-					/>{/snippet}
-			</SettingRow>
+			{#if barLink.phoneBottom === 'dock'}<SettingRow title={t('phone.nord.size')}>
+					{#snippet control()}<PhoneDockSize
+							size={inWindow ? barLink.phoneSize : phoneDockSize(desktop.prefs.phone.dock.size)}
+							onchange={setPhoneDockSize}
+						/>{/snippet}
+				</SettingRow>{/if}
 		</SettingGroup>
 	{/if}
 </div>

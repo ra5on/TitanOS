@@ -175,8 +175,8 @@ try {
   // area, to the areas (one row per area since 0.87), back home.
   await page.goto(base + "/settings");
   await page.locator("header.phone-bar").waitFor();
-  await page.locator('a.srow[href="/settings?area=system"]').tap();
-  await page.waitForURL(/[?&]area=system/);
+  await page.locator('a.srow[href="/settings?area=appearance"]').tap();
+  await page.waitForURL(/[?&]area=appearance/);
   await page.locator('a.srow[href="/settings/appearance"]').tap();
   await page.waitForURL(/\/settings\/appearance/);
   await page.waitForTimeout(500);
@@ -206,7 +206,7 @@ try {
   await page.screenshot({ path: `${out}/zurueck-vom-rand.png` });
   await touch(cdp, "touchEnd", []);
   await page.waitForURL(
-    (u) => u.pathname === "/settings" && u.searchParams.get("area") === "system",
+    (u) => u.pathname === "/settings" && u.searchParams.get("area") === "appearance",
   );
   await page.waitForTimeout(400);
   await swipe(page, cdp, [6, 420], [200, 424]);
@@ -218,8 +218,9 @@ try {
   await page.waitForURL((u) => u.pathname === "/");
   await page.locator("[data-nord-home]").waitFor();
 
-  // Existing app pages remain available from the Nordlicht home screen.
-  await page.getByRole("button", { name: "Seiten und Widgets" }).tap();
+  // §121: the pages with widgets remain available (Startbildschirm anpassen › Seiten mit Widgets).
+  await page.locator("button.customize").tap();
+  await page.getByRole("button", { name: "Seiten mit Widgets" }).tap();
   await page.waitForURL((u) => u.searchParams.get("phone") === "pages");
   await page.locator(".home .pages").waitFor();
   await page.goBack();

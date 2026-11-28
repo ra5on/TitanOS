@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { pinchZoom } from '#lib/components/pinch-zoom.ts';
+	import { keepAwake } from '#lib/wake-lock.svelte.ts';
 	// PLAN 79-7 (drawing 79-nvr/live2, approved): the live view. Every camera
 	// lies where the account put it, in the size it was given – moved and
 	// sized like the desktop's widgets ("Anordnen"), stored per account with
@@ -288,6 +289,8 @@
 		return [...byEvent.values()].sort((a, b) => b.start - a.start).slice(0, 8);
 	});
 	const nameOf = cameraName;
+	// §121: the live view keeps the screen of a phone or tablet on.
+	keepAwake(() => true);
 </script>
 
 <svelte:window onkeydown={keys} />

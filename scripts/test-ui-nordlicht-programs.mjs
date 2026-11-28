@@ -255,7 +255,8 @@ try {
       await installCalendar(ctx, calendarState());
       await page.goto(base + "/calendar?view=month&date=2026-11-17");
       const today = page.getByRole("button", { name: "Heute", exact: true });
-      const dock = page.locator(".resting [data-phone-dock]");
+      // §121: the bar at the bottom (ab Werk) reserves its height like the dock did.
+      const dock = page.locator("[data-phone-tabs]");
       await dock.waitFor();
       await page.waitForFunction(
         () =>
@@ -271,7 +272,7 @@ try {
       );
       await today.click();
       await shot(page, "Kalender-Heute-Handy");
-      console.log("calendar-phone dock and Today OK");
+      console.log("calendar-phone bottom bar and Today OK");
     } finally {
       await ctx.close();
     }

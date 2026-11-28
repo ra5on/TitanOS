@@ -224,6 +224,7 @@
 		const unwatch = watchWindows(
 			() => $state.snapshot(desktop.prefs.dock),
 			() => (dialog = 'wallpaper'),
+			(action) => (power = action),
 		);
 		return () => {
 			unwatch();

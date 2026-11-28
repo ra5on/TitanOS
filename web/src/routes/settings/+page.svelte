@@ -47,6 +47,7 @@
 	import { session } from '#lib/session.svelte.ts';
 	import { settingsSearch, settingsStates } from '#lib/settings-states.svelte.ts';
 	import SettingsShortcuts from './SettingsShortcuts.svelte';
+	import AccountBlock from './AccountBlock.svelte';
 
 	const prefix = 'settings-home';
 	const admin = $derived(['owner', 'admin'].includes(session.data?.user?.role ?? ''));
@@ -216,6 +217,8 @@
 					</SettingGroup>
 				{/each}
 			{:else}
+				<!-- §121: the phone's tab "Konto" – the own account above the areas. -->
+				<AccountBlock {admin} />
 				<SettingsShortcuts {admin} />
 				<SettingGroup title={t('settingshome.all')} id="{prefix}-areas">
 					{#each areas as area (area.group)}
